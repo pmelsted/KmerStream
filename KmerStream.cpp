@@ -14,8 +14,13 @@
 #include "kseq.h"
 #include "StreamCounter.hpp"
 #include "rephash.h"
-// #include "cyclichash.h"
 #include "lsb.hpp"
+#include "StreamCounter.hpp"
+
+//
+#include "KmerIterator.hpp"
+#include "Kmer.hpp"
+
 
 KSEQ_INIT(gzFile, gzread) 
 
@@ -28,7 +33,8 @@ struct ProgramOptions {
   string output;
   vector<string> files;
   double e;
-  ProgramOptions() : k(0), verbose(false), e(0.01) {}
+  int seed;
+  ProgramOptions() : k(0), verbose(false), e(0.01), seed(0) {}
 };
 
 void PrintUsage() {
@@ -39,18 +45,20 @@ void PrintUsage() {
     "-k, --kmer-size=INT     Size of k-mers" << endl <<
     "-o, --output=STRING     Filename for output" << endl <<
     "-e, --error-rate=FLOAT  Error rate guaranteed (default value 0.01)" << endl <<
+    "-s, --seed=INT          Seed value for the randomness (default value 0, use time based randomness)" << endl <<
     "    --verbose           Print lots of messages during run" << endl << endl
     ;
 }
 
 void ParseOptions(int argc, char **argv, ProgramOptions &opt) {
   int verbose_flag = 0;
-  const char* opt_string = "k:o:e:";
+  const char* opt_string = "k:o:e:s:";
   static struct option long_options[] =
   {
     {"verbose", no_argument, &verbose_flag, 1},
     {"kmer-size", required_argument, 0, 'k'},
     {"error-rate", required_argument, 0, 'e'},
+    {"seed", required_argument, 0, 's'},
     {"output", required_argument, 0, 'o'},
     {0,0,0,0}
   };
@@ -76,6 +84,9 @@ void ParseOptions(int argc, char **argv, ProgramOptions &opt) {
       break;
     case 'e':
       opt.e = atof(optarg);
+      break;
+    case 's':
+      opt.seed = atoi(optarg);
       break;
     default: break;
     }
@@ -121,7 +132,8 @@ bool CheckOptions(const ProgramOptions &opt) {
 }
 
 template <typename SP>
-void RunKmerStream(const ProgramOptions &opt) {
+void RunStream(const ProgramOptions &opt) {
+  std::ios_base::sync_with_stdio(false);
   gzFile fp;  
   kseq_t *seq;  
   SP sp(opt);
@@ -145,27 +157,22 @@ void RunKmerStream(const ProgramOptions &opt) {
   of.open(opt.output.c_str(), ios::out);
   of << sp.report();
   of.close();
-}
+};
 
-class StreamCounter{
+
+class ReadHasher {
 public:
-  StreamCounter(const ProgramOptions &opt) : MAX_TABLE(32), k(opt.k), e(opt.e), hf(opt.k) {
-    size = 1<<7; // 1024 bits
-    mask = (size<<6) -1; // 2^6=64 bits per block
-    M = new size_t[MAX_TABLE];
-    memset(M,0,MAX_TABLE);
-    table = new uint64_t[size*MAX_TABLE];
-    memset(table, 0, size*MAX_TABLE);
-    
+  ReadHasher(const ProgramOptions &opt) : k(opt.k), hf(opt.k), sc(opt.e, opt.seed) {
+    if (opt.seed != 0) {
+      hf.seed(opt.seed);
+    }
   }
-  ~StreamCounter() { 
-    delete[] table;
-    delete[] M;
-  }
+
   
   void operator()(const char* s, size_t l) {
     // create hashes for all k-mers
     // operate on hashes
+    /*
     if (l < k) {
       return;
     } 
@@ -174,51 +181,29 @@ public:
     for (size_t i = k; i < l; i++) {
       hf.update(s[i-k],s[i]);
       handle(hf.hash());
+      }*/
+    KmerIterator it(s),it_end;
+    for (; it != it_end; ++it) {
+      handle(it->first.rep().hash());
     }
+    
   }
   
   void handle(uint64_t val) {
-    // val is XXX .. XXX1000.. (w-1 times) ..00 0
-    size_t w = 1 + bitScanForward(val); // 1-based index of first 1
-    if (w >= MAX_TABLE) {
-      w = MAX_TABLE-1;
-    }
-    if (M[w] == size*64) {
-      return;
-    }
-    // val is now XXXX...XX, random
-    val = val >> w; // shift away pattern
-    
-    uint64_t i = val & mask;
-    uint64_t index = w*size+(i>>6);
-    uint64_t bit = 1ULL<<(i&63);
-    if ((table[index] & bit) == 0) {
-      table[index] |= bit; // i>>6 is index, 63=2^6-1 is 0..63 shift amount
-      M[w]++;
-    }
+    //sc(val);
+    cout << val << "\n";
   }
 
-  StreamCounter& join(StreamCounter &o) { return *this;}
   string report() {
-    stringstream s;
-    for (size_t i = 0; i < MAX_TABLE; i++) {
-      s << i << " " << M[i]<< endl;
-      for (size_t j = 0; j < size; j++) {
-	s << bitset<64>(table[i*size+j]) << " ";
-      }
-      s << endl;
-    }
-    return s.str();
+    return sc.report();
   }
+
 private:
-  double e;
-  size_t k;
-  uint64_t *table;
-  size_t *M;
-  size_t size;
-  uint64_t mask;
   RepHash hf;
-  const size_t MAX_TABLE;
+  size_t k;
+  StreamCounter sc;
+  //F2Counter f2;
+  //SumCounter sum;
 };
 
 
@@ -233,7 +218,9 @@ int main(int argc, char** argv) {
     exit(1);
   }
   
-  RunKmerStream<StreamCounter>(opt);
+  //
+  Kmer::set_k(opt.k);
+  RunStream<ReadHasher>(opt);
 }
 
 
