@@ -71,7 +71,7 @@ public:
 
     int n = 0;
     double limit = 0.2;
-    while (n == 0) {
+    while (n == 0 && limit > 1e-8) {
       for (size_t i = 0; i < MAX_TABLE; i++) {
 	size_t ts = 0;
 	for (size_t j = 0; j < R; j++) {
@@ -81,8 +81,8 @@ public:
 	}
 	
 	if (ts <= (1-limit)*R && ts >= limit*R) {
-	  double est = (log(1.0-ts/((double) R))/log(1.0-1.0/R)) * pow(2.0,i);
-	  std::cout << i << " " << ts << " " << limit<<  " " << est << std::endl;
+	  double est = (log(1.0-ts/((double) R))/log(1.0-1.0/R)) * pow(2.0,i+1);
+	  //std::cout << i << " " << ts << " " << limit<<  " " << est << std::endl;
 	  sum += est;
 	  n++;
 	}
@@ -98,8 +98,8 @@ public:
     int n = 0;
 
     double limit = 0.2;
-    while (n == 0) {
-      std::cout << "R = " << R << std::endl;
+    while (n == 0 && limit > 1e-8) {
+      //std::cout << "R = " << R << std::endl;
       for (size_t i = 0; i < MAX_TABLE; i++) {
 	size_t r1 = 0, r0 = 0;
 	for (size_t j = 0; j < R; j++) {
@@ -113,7 +113,7 @@ public:
 	}
 	
 	if ((r0 <= (1-limit)*R) && (r0 >= limit*R)) {
-	  sum += (R-1) * (r1/((double) r0)) * pow(2.0,i);
+	  sum += (R-1) * (r1/((double) r0)) * pow(2.0,i+1);
 	  n++;
 	}
       }

@@ -139,6 +139,7 @@ void RunStream(const ProgramOptions &opt) {
   SP sp(opt);
   // iterate over all reads
   int l;
+
   for (vector<string>::const_iterator it = opt.files.begin(); it != opt.files.end(); ++it) {
     fp = gzopen(it->c_str(), "r");
     seq = kseq_init(fp); // STEP 3: initialize seq  
@@ -146,6 +147,7 @@ void RunStream(const ProgramOptions &opt) {
       // seq->seq.s is of length seq->seq.l
       // TODO: parallelize this part
       sp(seq->seq.s, seq->seq.l);
+
     }  
 
     kseq_destroy(seq); // STEP 5: destroy seq  
@@ -172,7 +174,7 @@ public:
   void operator()(const char* s, size_t l) {
     // create hashes for all k-mers
     // operate on hashes
-    /*
+
     if (l < k) {
       return;
     } 
@@ -181,17 +183,11 @@ public:
     for (size_t i = k; i < l; i++) {
       hf.update(s[i-k],s[i]);
       handle(hf.hash());
-      }*/
-    KmerIterator it(s),it_end;
-    for (; it != it_end; ++it) {
-      handle(it->first.rep().hash());
     }
-    
   }
   
   void handle(uint64_t val) {
-    //sc(val);
-    cout << val << "\n";
+    sc(val);
   }
 
   string report() {
