@@ -1,10 +1,10 @@
 CC = g++
 CXX = g++
-INCLUDES = -I.
+INCLUDES = -I. 
 MAX_KMER_SIZE=64
-CXXFLAGS = -c -Wall -Wno-reorder $(INCLUDES) -DMAX_KMER_SIZE=$(MAX_KMER_SIZE)
+CXXFLAGS = -c -Wall -Wno-reorder $(INCLUDES) -DMAX_KMER_SIZE=$(MAX_KMER_SIZE) -fopenmp
 LDFLAGS =
-LDLIBS  = -lm -lz
+LDLIBS  = -lm -lz -lgomp
 
 all: CXXFLAGS += -O3
 all: target
@@ -22,7 +22,7 @@ profile: target
 target: KmerStream
 
 
-OBJECTS = lsb.o Kmer.o KmerIterator.o hash.o
+OBJECTS = lsb.o Kmer.o KmerIterator.o hash.o RepHash.o
 
 
 KmerStream: KmerStream.o $(OBJECTS)
@@ -34,6 +34,7 @@ KmerStream.o: KmerStream.cpp StreamCounter.hpp
 Kmer.o: Kmer.cpp Kmer.hpp
 KmerIterator.o: KmerIterator.cpp KmerIterator.hpp
 hash.o: hash.cpp hash.hpp
+RepHash.o: RepHash.cpp RepHash.hpp
 
 clean:
 	rm -f *.o KmerStream
