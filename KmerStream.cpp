@@ -42,10 +42,12 @@ struct ProgramOptions {
   string output;
   vector<string> files;
   double e;
+  size_t q_cutoff;
+  size_t q_base;
   size_t threads;
   int seed;
   size_t chunksize;
-  ProgramOptions() : k(0), verbose(false), bam(false), e(0.01), seed(0), threads(1), chunksize(100000) {}
+  ProgramOptions() : k(0), verbose(false), bam(false), e(0.01), seed(0), threads(1), chunksize(100000), q_base(33) {}
 };
 
 void PrintUsage() {
@@ -54,25 +56,31 @@ void PrintUsage() {
   cerr << "Usage: KmerStream [options] ... FASTQ files";
   cerr << endl << endl <<
     "-k, --kmer-size=INT      Size of k-mers" << endl <<
-    "-q, --quality-cutoff=INT Keep k-mers with bases above quality threshold (default 0)" << endl <<
+    "-q, --quality-cutoff=INT Keep k-mers with bases above quality threshold in PHRED (default 0)" << endl <<
     "-o, --output=STRING      Filename for output" << endl <<
     "-e, --error-rate=FLOAT   Error rate guaranteed (default value 0.01)" << endl <<
     "-t, --threads=INT        Number of threads to use (default value 1)" << endl <<
     "-s, --seed=INT           Seed value for the randomness (default value 0, use time based randomness)" << endl <<
     "-b, --bam                Input is in BAM format (default false)" << endl <<
-    "    --verbose            Print lots of messages during run" << endl << endl
+    "    --verbose            Print lots of messages during run" << endl << 
+    "    --q64                set if PHRED+64 scores are used (@...h) default used PHRED+33" << endl << endl
+
     ;
 }
 
 void ParseOptions(int argc, char **argv, ProgramOptions &opt) {
   int verbose_flag = 0;
   int bam_flag = 0;
-  const char* opt_string = "k:o:e:s:bt:";
+  int q64_flag =0;
+
+  const char* opt_string = "k:o:e:s:bt:q:";
   static struct option long_options[] =
   {
     {"verbose", no_argument, &verbose_flag, 1},
+    {"q64", no_argument, &q64_flag, 1},
     {"bam", no_argument, &bam_flag, 'b'},
     {"threads", required_argument, 0, 't'},
+    {"quality-cutoff", required_argument, 0, 'q'},
     {"kmer-size", required_argument, 0, 'k'},
     {"error-rate", required_argument, 0, 'e'},
     {"seed", required_argument, 0, 's'},
@@ -108,6 +116,9 @@ void ParseOptions(int argc, char **argv, ProgramOptions &opt) {
     case 't':
       opt.threads = atoi(optarg);
       break;
+    case 'q':
+      opt.q_cutoff = atoi(optarg);
+      break;
     default: break;
     }
   }
@@ -122,6 +133,9 @@ void ParseOptions(int argc, char **argv, ProgramOptions &opt) {
   }
   if (bam_flag) {
     opt.bam = true;
+  }
+  if (q64_flag) {
+    opt.q_base = 64;
   }
 }
 
@@ -162,6 +176,11 @@ bool CheckOptions(ProgramOptions &opt) {
       opt.threads = omp_get_max_threads();
     }
     #endif
+  }
+
+  if (opt.q_cutoff < 0) {
+    cerr << "Invalid quality score" << endl;
+    ret = false;
   }
 
   return ret;
@@ -285,19 +304,22 @@ public:
     if (l < k) {
       return;
     } 
-
+    
     while (j < l) {
+      //cout << "(" << i << ", " << j << ", " << last_valid << ")\t" << string(s).substr(i,j-i) << endl;
       // s[i...j-1] is a valid string, all k-mers in s[..j-1] have been processed
       char c = s[j];
       if (c != 'N' && c != 'n') {
 	if (last_valid) { 
 	  // s[i..j-1] was a valid k-mer k-mer, update 
+	  //cout << "out,in = " << s[i] << ", " << s[j] << endl;
 	  hf.update(s[i],s[j]);
 	  i++;
 	  j++;
 	} else {
 	  if (i + k -1 == j) {
 	    hf.init(s+i); // start the k-mer at position i
+	    //cout << " new valid k-mer" << endl;
 	    last_valid = true;
 	    i++;
 	    j++;
@@ -313,17 +335,10 @@ public:
       }
 
       if (last_valid) {
+	//cout << "hash value " << hf.hash() << endl;
 	handle(hf.hash());
       }
     }
-
-    /*hf.init(s);
-    handle(hf.hash());
-    for (size_t i = k; i < l; i++) {
-      hf.update(s[i-k],s[i]);
-      handle(hf.hash());
-    }
-    */
   }
 
   void handle(uint64_t val) {
@@ -349,7 +364,82 @@ private:
 };
 
 
+class ReadQualityHasher {
+public:
+  ReadQualityHasher(const ProgramOptions &opt) : k(opt.k), hf(opt.k), sc(opt.e, opt.seed), q_cutoff(opt.q_cutoff), q_base(opt.q_base) {
+    if (opt.seed != 0) {
+      hf.seed(opt.seed);
+    }
+  }
 
+  void operator()(const char* s, size_t l, const char* q, size_t ql) {
+    // create hashes for all k-mers
+    // operate on hashes
+
+    size_t i=0,j=0;
+    bool last_valid = false;
+    
+    if (l < k) {
+      return;
+    } 
+    
+    while (j < l) {
+      //cout << "(" << i << ", " << j << ", " << last_valid << ")\t" << string(s).substr(i,j-i) << endl;
+      // s[i...j-1] is a valid string, all k-mers in s[..j-1] have been processed
+      char c = s[j];
+      if (c != 'N' && c != 'n' && q[j] >= (char) (q_base+q_cutoff)) {
+	if (last_valid) { 
+	  // s[i..j-1] was a valid k-mer k-mer, update 
+	  //cout << "out,in = " << s[i] << ", " << s[j] << endl;
+	  hf.update(s[i],s[j]);
+	  i++;
+	  j++;
+	} else {
+	  if (i + k -1 == j) {
+	    hf.init(s+i); // start the k-mer at position i
+	    //cout << " new valid k-mer" << endl;
+	    last_valid = true;
+	    i++;
+	    j++;
+	  } else {
+	    j++; // move along
+	  }
+	}
+      } else {
+	// invalid character, restart
+	j++;
+	i = j;
+	last_valid = false;
+      }
+
+      if (last_valid) {
+	//cout << "hash value " << hf.hash() << endl;
+	handle(hf.hash());
+      }
+    }
+  }
+
+  void handle(uint64_t val) {
+    sc(val);
+  }
+
+  string report() {
+    return sc.report();
+  }
+
+  void join(const ReadQualityHasher& o) {
+    sc.join(o.sc);
+  }
+
+private:
+
+  size_t q_cutoff,q_base;
+  RepHash hf;
+  size_t k;
+  StreamCounter sc;
+  //F2Counter f2;
+  //SumCounter sum;
+};
 
 
 int main(int argc, char** argv) {
@@ -362,11 +452,20 @@ int main(int argc, char** argv) {
   
   //
   Kmer::set_k(opt.k);
+  bool use_qual = (opt.q_cutoff != 0);
   if (opt.bam) {
     cout << "running bam file" << endl;
-    RunBamStream<ReadHasher>(opt);
+    if (!use_qual) {
+      RunBamStream<ReadHasher>(opt);
+    } else {
+      RunBamStream<ReadQualityHasher>(opt);
+    }
   } else {
-    RunFastqStream<ReadHasher>(opt);
+    if (!use_qual) {
+      RunFastqStream<ReadHasher>(opt);
+    } else {
+      RunFastqStream<ReadQualityHasher>(opt);
+    }
   }
 }
 

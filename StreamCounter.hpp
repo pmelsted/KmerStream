@@ -10,7 +10,7 @@
 
 class StreamCounter{
 public:
-  StreamCounter(double e_, int seed_) : MAX_TABLE(32), maxVal(3ULL), countWidth(2), countsPerLong(32), e(e_), seed(seed_) , wmin(0) {
+  StreamCounter(double e_, int seed_) : MAX_TABLE(32), maxVal(15ULL), countWidth(4), countsPerLong(16), e(e_), seed(seed_) , wmin(0), sumCount(0) {
     size_t numcounts = (size_t)(48.0/(e*e) + 1); // approx 3 std-dev, true with 0.001 prob.
     if (numcounts < 8192) { numcounts = 8192;}
     size =(numcounts+countsPerLong-1)/countsPerLong; // size is number of uint64_t's used
@@ -23,7 +23,7 @@ public:
     memset(table, 0, size*MAX_TABLE);
   }
 
-  StreamCounter(const StreamCounter& o) : seed(o.seed), e(o.e), wmin(0), size(o.size), maxCount(o.maxCount), mask(o.mask), MAX_TABLE(o.MAX_TABLE), countWidth(o.countWidth), countsPerLong(o.countsPerLong), maxVal(o.maxVal) {
+  StreamCounter(const StreamCounter& o) : seed(o.seed), e(o.e), wmin(0), size(o.size), maxCount(o.maxCount), mask(o.mask), MAX_TABLE(o.MAX_TABLE), countWidth(o.countWidth), countsPerLong(o.countsPerLong), maxVal(o.maxVal), sumCount(o.sumCount) {
     // copy constructor, creates object of same size with same seed, but empty data
     M = new size_t[MAX_TABLE];
     memset(M,0,MAX_TABLE);
@@ -41,6 +41,7 @@ public:
   }
     
   void operator()(uint64_t hashval) {
+    sumCount++;
     // hashval is XXX .. XXX1000.. (w-1 times) ..00 0
     size_t wmax = bitScanForward(hashval); // 1-based index of first 1
 
@@ -180,7 +181,8 @@ public:
 	if ((r0 <= (1-limit)*R) && (r0 >= limit*R)) {
 	  double x1 = (r1/((double) r0));
 	  double x2 = (r2/((double) r0) - x1*x1/2.0 );
-	  return x2*(R-1)*pow(2.0,i);
+	  std::cout << "r0,r1,r2 = " << r0 << ", " << r1 << ", " << r2 << std::endl;
+	  sum += x2*(R-1)*pow(2.0,i);
 	  n++;
 	  break;
 	}
@@ -202,10 +204,13 @@ public:
       s << endl;
     }
     */ 
-
+    
     s << "F0 = " << F0() << std::endl;
     s << "f1 = " << f1() << std::endl;
-    s << "f2 = " << f2() << std::endl;
+    //s << "f2 = " << f2() << std::endl;
+    s << "F1 = " << sumCount << std::endl;
+    // need AMS
+    
     
     return s.str();
   }
@@ -231,6 +236,7 @@ private:
   int seed;
   double e;
   uint64_t *table;
+  size_t sumCount;
   size_t *M;
   size_t wmin; // all w < wmin are full
   size_t size;
