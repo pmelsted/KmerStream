@@ -275,20 +275,55 @@ public:
     }
   }
 
-  
   void operator()(const char* s, size_t l, const char* q, size_t ql) {
     // create hashes for all k-mers
     // operate on hashes
 
+    size_t i=0,j=0;
+    bool last_valid = false;
+    
     if (l < k) {
       return;
     } 
-    hf.init(s);
+
+    while (j < l) {
+      // s[i...j-1] is a valid string, all k-mers in s[..j-1] have been processed
+      char c = s[j];
+      if (c != 'N' && c != 'n') {
+	if (last_valid) { 
+	  // s[i..j-1] was a valid k-mer k-mer, update 
+	  hf.update(s[i],s[j]);
+	  i++;
+	  j++;
+	} else {
+	  if (i + k -1 == j) {
+	    hf.init(s+i); // start the k-mer at position i
+	    last_valid = true;
+	    i++;
+	    j++;
+	  } else {
+	    j++; // move along
+	  }
+	}
+      } else {
+	// invalid character, restart
+	j++;
+	i = j;
+	last_valid = false;
+      }
+
+      if (last_valid) {
+	handle(hf.hash());
+      }
+    }
+
+    /*hf.init(s);
     handle(hf.hash());
     for (size_t i = k; i < l; i++) {
       hf.update(s[i-k],s[i]);
       handle(hf.hash());
     }
+    */
   }
 
   void handle(uint64_t val) {
