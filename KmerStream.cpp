@@ -42,12 +42,12 @@ struct ProgramOptions {
   string output;
   vector<string> files;
   double e;
-  size_t q_cutoff;
+  vector<size_t> q_cutoff;
   size_t q_base;
   size_t threads;
   int seed;
   size_t chunksize;
-  ProgramOptions() : k(0), verbose(false), bam(false), e(0.01), seed(0), threads(1), chunksize(100000), q_base(33), q_cutoff(0) {}
+  ProgramOptions() : k(0), verbose(false), bam(false), e(0.01), seed(0), threads(1), chunksize(100000), q_base(33) {}
 };
 
 void PrintUsage() {
@@ -136,6 +136,9 @@ void ParseOptions(int argc, char **argv, ProgramOptions &opt) {
   }
   if (q64_flag) {
     opt.q_base = 64;
+  }
+  if (q_cutoff...) {
+
   }
 }
 
