@@ -47,7 +47,7 @@ struct ProgramOptions {
   size_t threads;
   int seed;
   size_t chunksize;
-  ProgramOptions() : k(0), verbose(false), bam(false), e(0.01), seed(0), threads(1), chunksize(100000), q_base(33) {}
+  ProgramOptions() : k(0), verbose(false), bam(false), e(0.01), seed(0), threads(1), chunksize(100000), q_base(33), q_cutoff(0) {}
 };
 
 void PrintUsage() {
@@ -59,7 +59,7 @@ void PrintUsage() {
     "-q, --quality-cutoff=INT Keep k-mers with bases above quality threshold in PHRED (default 0)" << endl <<
     "-o, --output=STRING      Filename for output" << endl <<
     "-e, --error-rate=FLOAT   Error rate guaranteed (default value 0.01)" << endl <<
-    "-t, --threads=INT        Number of threads to use (default value 1)" << endl <<
+    "-t, --threads=INT        SNumber of threads to use (default value 1)" << endl <<
     "-s, --seed=INT           Seed value for the randomness (default value 0, use time based randomness)" << endl <<
     "-b, --bam                Input is in BAM format (default false)" << endl <<
     "    --verbose            Print lots of messages during run" << endl << 
@@ -454,7 +454,6 @@ int main(int argc, char** argv) {
   Kmer::set_k(opt.k);
   bool use_qual = (opt.q_cutoff != 0);
   if (opt.bam) {
-    cout << "running bam file" << endl;
     if (!use_qual) {
       RunBamStream<ReadHasher>(opt);
     } else {

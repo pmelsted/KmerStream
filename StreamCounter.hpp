@@ -8,30 +8,54 @@
 
 #include "lsb.hpp"
 
+size_t roundUpPowerOfTwo(size_t size) {
+  size--; 
+  size |= size>>1; 
+  size |= size>>2; 
+  size |= size>>4; 
+  size |= size>>8; 
+  size |= size>>16; 
+  size |= size>>32; 
+  size++;
+  return size;
+}
+
 class StreamCounter{
 public:
   StreamCounter(double e_, int seed_) : MAX_TABLE(32), maxVal(15ULL), countWidth(4), countsPerLong(16), e(e_), seed(seed_) , wmin(0), sumCount(0) {
     size_t numcounts = (size_t)(48.0/(e*e) + 1); // approx 3 std-dev, true with 0.001 prob.
+    F2size  = roundUpPowerOfTwo((size_t)(2.0/(e*e)+1));
+    F2table = new uint64_t[F2size];
+    memset(F2table,0,F2size * sizeof(uint64_t));
+
     if (numcounts < 8192) { numcounts = 8192;}
+    
     size =(numcounts+countsPerLong-1)/countsPerLong; // size is number of uint64_t's used
-    size--; size |= size>>1; size |= size>>2; size |= size>>4; size |= size>>8; size |= size>>16; size |= size>>32; size++;
+    size = roundUpPowerOfTwo(size);
     mask = (size * countsPerLong) -1; 
     maxCount = size * countsPerLong * maxVal;
+
     M = new size_t[MAX_TABLE];
-    memset(M,0,MAX_TABLE);
+    memset(M,0,MAX_TABLE*sizeof(size_t));
+
     table = new uint64_t[size*MAX_TABLE];
-    memset(table, 0, size*MAX_TABLE);
+    memset(table, 0, size*MAX_TABLE*sizeof(uint64_t));
   }
 
-  StreamCounter(const StreamCounter& o) : seed(o.seed), e(o.e), wmin(0), size(o.size), maxCount(o.maxCount), mask(o.mask), MAX_TABLE(o.MAX_TABLE), countWidth(o.countWidth), countsPerLong(o.countsPerLong), maxVal(o.maxVal), sumCount(o.sumCount) {
+  StreamCounter(const StreamCounter& o) : seed(o.seed), e(o.e), wmin(0), size(o.size), maxCount(o.maxCount), mask(o.mask), MAX_TABLE(o.MAX_TABLE), countWidth(o.countWidth), countsPerLong(o.countsPerLong), maxVal(o.maxVal), sumCount(0), F2size(o.F2size) {
     // copy constructor, creates object of same size with same seed, but empty data
     M = new size_t[MAX_TABLE];
-    memset(M,0,MAX_TABLE);
+    memset(M,0,MAX_TABLE*sizeof(size_t));
+
     table = new uint64_t[size*MAX_TABLE];
-    memset(table, 0, size*MAX_TABLE);
+    memset(table, 0, size*MAX_TABLE*sizeof(uint64_t));
+
+    F2table = new uint64_t[F2size];
+    memset(F2table,0,F2size * sizeof(uint64_t));
   }
 
   ~StreamCounter() { 
+    delete[] F2table;
     delete[] table;
     delete[] M;
   }
@@ -42,6 +66,10 @@ public:
     
   void operator()(uint64_t hashval) {
     sumCount++;
+
+    // F2 estimation
+    ++F2table[(hashval & (F2size-1))];
+
     // hashval is XXX .. XXX1000.. (w-1 times) ..00 0
     size_t wmax = bitScanForward(hashval); // 1-based index of first 1
 
@@ -210,10 +238,23 @@ public:
     //s << "f2 = " << f2() << std::endl;
     s << "F1 = " << sumCount << std::endl;
     // need AMS
+    s << "F2 = " << F2() << std::endl;
     
     
     return s.str();
   }
+
+  size_t F2() const {
+    // based on Thorup and Zhangs, F2 estimator
+    double sum=0,sqsum=0;
+    for (size_t i = 0; i < F2size; i++) {
+      double c = (double) F2table[i];
+      sum += c;
+      sqsum += c*c;
+    }
+    return (size_t)(sqsum + (sqsum - sum*sum)/F2size);
+  }
+
 private:
 
   uint64_t getVal(size_t index, size_t w) const {
@@ -236,6 +277,8 @@ private:
   int seed;
   double e;
   uint64_t *table;
+  uint64_t *F2table;
+  size_t F2size;
   size_t sumCount;
   size_t *M;
   size_t wmin; // all w < wmin are full
