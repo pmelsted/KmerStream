@@ -56,7 +56,7 @@ void PrintUsage() {
   cerr << "Usage: KmerStream [options] ... FASTQ files";
   cerr << endl << endl <<
     "-k, --kmer-size=INT      Size of k-mers" << endl <<
-    "-q, --quality-cutoff=INT Keep k-mers with bases above quality threshold in PHRED (default 0)" << endl <<
+    "-q, --quality-cutoff=INT Comma separated list, keep k-mers with bases above quality threshold in PHRED (default 0)" << endl <<
     "-o, --output=STRING      Filename for output" << endl <<
     "-e, --error-rate=FLOAT   Error rate guaranteed (default value 0.01)" << endl <<
     "-t, --threads=INT        SNumber of threads to use (default value 1)" << endl <<
@@ -90,6 +90,8 @@ void ParseOptions(int argc, char **argv, ProgramOptions &opt) {
 
   int option_index = 0; 
   int c;
+  string qs;
+  size_t prev=0,next=0;
 
   while (true) {
     c = getopt_long(argc,argv,opt_string, long_options, &option_index);
@@ -117,7 +119,17 @@ void ParseOptions(int argc, char **argv, ProgramOptions &opt) {
       opt.threads = atoi(optarg);
       break;
     case 'q':
-      opt.q_cutoff = atoi(optarg);
+
+      qs = string(optarg);
+      while ((next = qs.find(',',prev)) != string::npos) {
+	if (next-prev != 0) {
+	  opt.q_cutoff.push_back(atoi(qs.substr(prev,next-prev).c_str()));
+	}
+	prev = next+1;
+      }
+      if (prev < qs.size()) {
+	opt.q_cutoff.push_back(atoi(qs.substr(prev).c_str()));
+      }
       break;
     default: break;
     }
@@ -137,8 +149,8 @@ void ParseOptions(int argc, char **argv, ProgramOptions &opt) {
   if (q64_flag) {
     opt.q_base = 64;
   }
-  if (q_cutoff...) {
-
+  if (opt.q_cutoff.empty()) {
+    opt.q_cutoff.push_back(0);
   }
 }
 
@@ -181,7 +193,7 @@ bool CheckOptions(ProgramOptions &opt) {
     #endif
   }
 
-  if (opt.q_cutoff < 0) {
+  if (opt.q_cutoff[0] < 0) {
     cerr << "Invalid quality score" << endl;
     ret = false;
   }
@@ -189,17 +201,61 @@ bool CheckOptions(ProgramOptions &opt) {
   return ret;
 }
 
+template <typename SP>
+void RunFastqStream(const ProgramOptions &opt) {
+  std::ios_base::sync_with_stdio(false);
+  gzFile fp = 0;
+  kseq_t *seq = 0;
+  size_t qsize = opt.q_cutoff.size();
+  vector<SP> sps(qsize,SP(opt));
+  for (size_t i = 0; i < qsize; i++) {
+    sps[i].setQualityCutoff(opt.q_cutoff[i]);
+  }
+  // iterate over all reads
+  int l;
+
+  for (vector<string>::const_iterator it = opt.files.begin(); it != opt.files.end(); ++it) {
+    fp = gzopen(it->c_str(), "r");
+    seq = kseq_init(fp); 
+    while ((l = kseq_read(seq)) > 0) { 
+      // seq->seq.s is of length seq->seq.l
+      for (size_t i = 0; i < qsize; i++) {
+	sps[i](seq->seq.s, seq->seq.l, seq->qual.s, seq->qual.l);
+      }
+    }
+
+  }
+
+  kseq_destroy(seq); // STEP 5: destroy seq
+  gzclose(fp); // STEP 6: close the file handler
+
+  ofstream of;
+  of.open(opt.output.c_str(), ios::out);
+  for (size_t i = 0 ; i < qsize; i++) {
+    of << "Q = " << opt.q_cutoff[i] << endl;
+    of << sps[i].report();
+  }
+  of.close();
+
+
+}
 
 
 template <typename SP>
-void RunFastqStream(const ProgramOptions &opt) {
+void RunThreadedFastqStream(const ProgramOptions &opt) {
   std::ios_base::sync_with_stdio(false);
   gzFile fp;  
   kseq_t *seq;
   size_t threads = opt.threads;
+  size_t qsize = opt.q_cutoff.size();
 
-  vector<SP> sps(threads,SP(opt)); 
-  
+  vector<SP> sps(threads*qsize,SP(opt)); 
+  for (size_t i = 0; i < qsize; i++) {
+    for (size_t j = 0; j < threads; j++) {
+      sps[j*qsize + i].setQualityCutoff(opt.q_cutoff[i]);
+    }
+  }
+
 
   // iterate over all reads
   int l = 1;
@@ -236,7 +292,9 @@ void RunFastqStream(const ProgramOptions &opt) {
 	
 #pragma omp for 
 	for (size_t j = 0; j < reads.size(); j++) {
-	  sps[threadnum](reads[j].first.c_str(), reads[j].first.size(), reads[j].second.c_str(), reads[j].second.size());
+	  for (size_t i = 0; i < qsize; i++) {
+	    sps[threadnum*qsize + i](reads[j].first.c_str(), reads[j].first.size(), reads[j].second.c_str(), reads[j].second.size());
+	  }
 	}
 	
       }
@@ -245,15 +303,20 @@ void RunFastqStream(const ProgramOptions &opt) {
     gzclose(fp); 
   }
   
-  for (size_t i = 1; i < sps.size(); i++) {
-    sps[0].join(sps[i]);
-  }
+  // join with thread 0
 
-  SP& sp = sps[0];
+  for (size_t i = 1; i < threads; i++) {
+    for (size_t j = 0; j < qsize; j++) {
+      sps[j].join(sps[i*qsize+j]);
+    }
+  }
 
   ofstream of;
   of.open(opt.output.c_str(), ios::out);
-  of << sp.report();
+  for (size_t i = 0; i < qsize; i++) {
+    of << "Q = " << opt.q_cutoff[i] << endl;
+    of << sps[i].report();
+  }
   of.close();
 };
 
@@ -279,7 +342,7 @@ void RunBamStream(const ProgramOptions &opt) {
     }  
 
   }
-  cout << "Reads in bam files " << n << " " << t << endl;
+  //cout << "Reads in bam files " << n << " " << t << endl;
 
   ofstream of;
   of.open(opt.output.c_str(), ios::out);
@@ -352,8 +415,8 @@ public:
     return sc.report();
   }
 
-  void join(const ReadHasher& o) {
-    sc.join(o.sc);
+  bool join(const ReadHasher& o) {
+    return sc.join(o.sc);
   }
 
 private:
@@ -369,10 +432,14 @@ private:
 
 class ReadQualityHasher {
 public:
-  ReadQualityHasher(const ProgramOptions &opt) : k(opt.k), hf(opt.k), sc(opt.e, opt.seed), q_cutoff(opt.q_cutoff), q_base(opt.q_base) {
+  ReadQualityHasher(const ProgramOptions &opt) : k(opt.k), hf(opt.k), sc(opt.e, opt.seed), q_cutoff(0), q_base(opt.q_base) {
     if (opt.seed != 0) {
       hf.seed(opt.seed);
     }
+  }
+
+  void setQualityCutoff(size_t q) {
+    q_cutoff = q;
   }
 
   void operator()(const char* s, size_t l, const char* q, size_t ql) {
@@ -430,8 +497,8 @@ public:
     return sc.report();
   }
 
-  void join(const ReadQualityHasher& o) {
-    sc.join(o.sc);
+  bool join(const ReadQualityHasher& o) {
+    return sc.join(o.sc);
   }
 
 private:
@@ -455,16 +522,29 @@ int main(int argc, char** argv) {
   
   //
   Kmer::set_k(opt.k);
-  bool use_qual = (opt.q_cutoff != 0);
+  bool use_qual = opt.q_cutoff.empty() || (*(opt.q_cutoff.begin()) != 0);
   if (opt.bam) {
+    /*
     if (!use_qual) {
       RunBamStream<ReadHasher>(opt);
     } else {
       RunBamStream<ReadQualityHasher>(opt);
     }
+    */
+    if (opt.threads > 1) {
+      //RunThreadedBamStream<ReadQualityHasher>(opt);
+    } else {
+      RunBamStream<ReadQualityHasher>(opt);
+    }
   } else {
-    if (!use_qual) {
+    /*if (!use_qual) {
       RunFastqStream<ReadHasher>(opt);
+    } else {
+      RunFastqStream<ReadQualityHasher>(opt);
+    }
+    */
+    if (opt.threads > 1) {
+      RunThreadedFastqStream<ReadQualityHasher>(opt);
     } else {
       RunFastqStream<ReadQualityHasher>(opt);
     }

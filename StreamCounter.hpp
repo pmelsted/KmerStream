@@ -110,7 +110,7 @@ public:
   }
 
   bool join(const StreamCounter &o) {
-    if (size != o.size || seed != o.seed) {
+    if (size != o.size || F2size != o.F2size || seed != o.seed) {
       return false;
     }
 
@@ -118,6 +118,11 @@ public:
       for (size_t j = 0; j < size*countsPerLong; j++) {
 	setVal(j,i,getVal(j,i)+o.getVal(j,i));
       }
+    }
+
+    sumCount += o.sumCount;
+    for (size_t i = 0; i < F2size; i++) {
+      F2table[i] += o.F2table[i];
     }
 
     return true;
