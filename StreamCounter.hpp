@@ -22,7 +22,7 @@ size_t roundUpPowerOfTwo(size_t size) {
 
 class StreamCounter{
 public:
-  StreamCounter(double e_, int seed_) : MAX_TABLE(32), maxVal(15ULL), countWidth(4), countsPerLong(16), e(e_), seed(seed_) , wmin(0), sumCount(0) {
+  StreamCounter(double e_, int seed_) : MAX_TABLE(32), maxVal(15ULL), countWidth(4), countsPerLong(16), e(e_), seed(seed_), sumCount(0) {
     size_t numcounts = (size_t)(48.0/(e*e) + 1); // approx 3 std-dev, true with 0.001 prob.
     F2size  = roundUpPowerOfTwo((size_t)(2.0/(e*e)+1));
     F2table = new uint64_t[F2size];
@@ -30,9 +30,9 @@ public:
 
     if (numcounts < 8192) { numcounts = 8192;}
     
-    size =(numcounts+countsPerLong-1)/countsPerLong; // size is number of uint64_t's used
+    size =(numcounts+countsPerLong-1)/countsPerLong; // size is number of uint64_t's use
     size = roundUpPowerOfTwo(size);
-    mask = (size * countsPerLong) -1; 
+    mask = (size * countsPerLong) -1;
     maxCount = size * countsPerLong * maxVal;
 
     M = new size_t[MAX_TABLE];
@@ -42,7 +42,7 @@ public:
     memset(table, 0, size*MAX_TABLE*sizeof(uint64_t));
   }
 
-  StreamCounter(const StreamCounter& o) : seed(o.seed), e(o.e), wmin(0), size(o.size), maxCount(o.maxCount), mask(o.mask), MAX_TABLE(o.MAX_TABLE), countWidth(o.countWidth), countsPerLong(o.countsPerLong), maxVal(o.maxVal), sumCount(0), F2size(o.F2size) {
+  StreamCounter(const StreamCounter& o) : seed(o.seed), e(o.e), size(o.size), maxCount(o.maxCount), mask(o.mask), MAX_TABLE(o.MAX_TABLE), countWidth(o.countWidth), countsPerLong(o.countsPerLong), maxVal(o.maxVal), sumCount(0), F2size(o.F2size) {
     // copy constructor, creates object of same size with same seed, but empty data
     M = new size_t[MAX_TABLE];
     memset(M,0,MAX_TABLE*sizeof(size_t));
@@ -71,42 +71,25 @@ public:
     ++F2table[(hashval & (F2size-1))];
 
     // hashval is XXX .. XXX1000.. (w-1 times) ..00 0
-    size_t wmax = bitScanForward(hashval); // 1-based index of first 1
+    size_t w = bitScanForward(hashval); // 1-based index of first 1
 
-    if (wmax < wmin) {
+    if (w >= MAX_TABLE) {
+      w = MAX_TABLE-1;
+    }
+
+    if (M[w] == size*countsPerLong*maxVal) {
       return;
     }
 
-    if (wmax >= MAX_TABLE) {
-      wmax = MAX_TABLE-1;
-    }
-    bool full = false;
-    for (size_t w = wmin; w <= wmax; w++) {
     // hashval is now XXXX...XX, random
-      uint64_t hval = hashval >> (w+1); // shift away pattern of XXX10000
+    uint64_t hval = hashval >> (w+1); // shift away pattern of XXX10000
     
-      uint64_t index = hval & mask;
-      uint64_t val = getVal(index,w);
-      if (val != maxVal) { // max count
-	setVal(index,w,val+1);
-	M[w]++;
-	if (M[w] == size * countsPerLong * maxVal) {
-	  full = true;
-	}
-      }
+    uint64_t index = hval & mask;
+    uint64_t val = getVal(index,w);
+    if (val != maxVal) { // max count
+      setVal(index,w,val+1);
+      M[w]++;
     }
-
-    if (full) {
-      size_t w = wmin;
-      for (; w <= wmax; w++) {
-	if (M[w] == maxCount) {
-	  wmin = w+1;
-	} else {
-	  break;
-	}
-      }
-    }
-
   }
 
   bool join(const StreamCounter &o) {
@@ -144,7 +127,7 @@ public:
 	}
 	
 	if (ts <= (1-limit)*R && ts >= limit*R) {
-	  double est = (log(1.0-ts/((double) R))/log(1.0-1.0/R)) * pow(2.0,i);
+	  double est = (log(1.0-ts/((double) R))/log(1.0-1.0/R)) * pow(2.0,i+1);
 	  //std::cout << i << " " << ts << " " << limit<<  " " << est << std::endl;
 	  sum += est;
 	  n++;
@@ -177,7 +160,7 @@ public:
 	}
 	
 	if ((r0 <= (1-limit)*R) && (r0 >= limit*R)) {
-	  sum += (R-1) * (r1/((double) r0)) * pow(2.0,i);
+	  sum += (R-1) * (r1/((double) r0)) * pow(2.0,i+1);
 	  n++;
 	  break;
 	}
@@ -188,6 +171,7 @@ public:
     return (size_t) (sum/n);
   }
 
+  /*
  size_t f2() const {
     size_t R = size*countsPerLong;
     double sum = 0;
@@ -215,7 +199,7 @@ public:
 	  double x1 = (r1/((double) r0));
 	  double x2 = (r2/((double) r0) - x1*x1/2.0 );
 	  std::cout << "r0,r1,r2 = " << r0 << ", " << r1 << ", " << r2 << std::endl;
-	  sum += x2*(R-1)*pow(2.0,i);
+	  sum += x2*(R-1)*pow(2.0,i+1);
 	  n++;
 	  break;
 	}
@@ -225,24 +209,71 @@ public:
     
     return (size_t) (sum/n);
   }
+ size_t f3() const {
+    size_t R = size*countsPerLong;
+    double sum = 0;
+    int n = 0;
+
+    double limit = 0.2;
+    while (n == 0 && limit > 1e-8) {
+      //std::cout << "R = " << R << std::endl;
+      for (size_t i = 0; i < MAX_TABLE; i++) {
+	size_t r3 = 0, r2 = 0, r1 = 0, r0 = 0;
+	for (size_t j = 0; j < R; j++) {
+	  uint64_t val = getVal(j,i);
+	  if (val == 0) {
+	    r0++;
+	  }
+	  if (val == 1) {
+	    r1++;
+	  }
+	  if (val == 2) {
+	    r2++;
+	  }
+	  if (val == 3) {
+	    r3++;
+	  }
+	}
+	
+	if ((r0 <= (1-limit)*R) && (r0 >= limit*R)) {
+	  double x1 = (r1/((double) r0));
+	  double x2 = (r2/((double) r0) - x1*x1/2.0 );
+	  double x3 = (r3/((double) r0) - x1*x1*x1/6.0 - x1*x1*x2/2.0);
+	  std::cout << "r0,r1,r2 = " << r0 << ", " << r1 << ", " << r2 << ", " << r3 << std::endl;
+	  sum += x3*(R-1)*pow(2.0,i+1);
+	  n++;
+	  break;
+	}
+      }
+      limit = limit/1.5;
+    }
+    
+    return (size_t) (sum/n);
+    }*/
+
   
   std::string report() const {
     std::stringstream s;
     /*
+    size_t R = size*countsPerLong;
+    s << "R = " << R << std::endl;
     for (size_t i = 0; i < MAX_TABLE; i++) {
-      s << i << " " << M[i]<< endl;
-      for (size_t j = 0; j < size; j++) {
-	s << bitset<64>(table[i*size+j]) << " ";
+      int count[4] = {0,0,0,0};
+      s << "M[" << i << "] =  " << M[i]<< std::endl;
+      for (size_t j = 0; j < R; j++) {
+	uint64_t val = getVal(j,i);
+	count[val]++;
       }
-      s << endl;
+      s << count[0] << ", " << count[1] << ", " << count[2] << ", " << count[3] << std::endl;
     }
-    */ 
+    s << std::endl << F0() << std::endl;
+    */
     
     s << "F0 = " << F0() << std::endl;
     s << "f1 = " << f1() << std::endl;
-    //s << "f2 = " << f2() << std::endl;
+  //s << "f2 = " << f2() << std::endl;
+  //s << "f3 = " << f3() << std::endl;
     s << "F1 = " << sumCount << std::endl;
-    // need AMS
     s << "F2 = " << F2() << std::endl;
     
     
@@ -286,7 +317,6 @@ private:
   size_t F2size;
   size_t sumCount;
   size_t *M;
-  size_t wmin; // all w < wmin are full
   size_t size;
   size_t maxCount;
   uint64_t mask;

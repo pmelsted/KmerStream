@@ -47,7 +47,7 @@ struct ProgramOptions {
   size_t threads;
   int seed;
   size_t chunksize;
-  ProgramOptions() : k(0), verbose(false), bam(false), e(0.01), seed(0), threads(1), chunksize(100000), q_base(33) {}
+  ProgramOptions() : k(0), verbose(false), bam(false), e(0.01), seed(0), threads(1), chunksize(10000), q_base(33) {}
 };
 
 void PrintUsage() {
@@ -215,6 +215,7 @@ void RunFastqStream(const ProgramOptions &opt) {
   int l;
 
   for (vector<string>::const_iterator it = opt.files.begin(); it != opt.files.end(); ++it) {
+    //cout << "reading file " << *it << endl;
     fp = gzopen(it->c_str(), "r");
     seq = kseq_init(fp); 
     while ((l = kseq_read(seq)) > 0) { 
@@ -258,7 +259,7 @@ void RunThreadedFastqStream(const ProgramOptions &opt) {
 
 
   // iterate over all reads
-  int l = 1;
+
   size_t readCount;
   size_t chunk = opt.chunksize;
   read_t reads(chunk);
@@ -266,6 +267,8 @@ void RunThreadedFastqStream(const ProgramOptions &opt) {
   omp_set_num_threads(threads);  
 #endif 
   for (vector<string>::const_iterator it = opt.files.begin(); it != opt.files.end(); ++it) {
+    int l = 1;
+    //cout << "reading file " << *it << endl;
     fp = gzopen(it->c_str(), "r");
     seq = kseq_init(fp);
     
@@ -320,8 +323,10 @@ void RunThreadedFastqStream(const ProgramOptions &opt) {
   of.close();
 };
 
+
+
 template <typename SP>
-void RunBamStream(const ProgramOptions &opt) {
+void RunThreadedBamStream(const ProgramOptions &opt) {
   // TODO: merge this with seqan libs
   std::ios_base::sync_with_stdio(false);
   SP sp(opt);
@@ -342,11 +347,54 @@ void RunBamStream(const ProgramOptions &opt) {
     }  
 
   }
-  //cout << "Reads in bam files " << n << " " << t << endl;
+  //cout << "Records in bam files " << n << " " << t << endl;
 
   ofstream of;
   of.open(opt.output.c_str(), ios::out);
   of << sp.report();
+  of.close();
+};
+
+
+template <typename SP>
+void RunBamStream(const ProgramOptions &opt) {
+  // TODO: merge this with seqan libs
+  std::ios_base::sync_with_stdio(false);
+  size_t qsize = opt.q_cutoff.size();
+  vector<SP> sps(qsize, SP(opt));
+  for (size_t i = 0; i < qsize; i++) {
+    sps[i].setQualityCutoff(opt.q_cutoff[i]);
+  }
+
+  // iterate over all reads
+  size_t n = 0,t=0;
+  for (vector<string>::const_iterator it = opt.files.begin(); it != opt.files.end(); ++it) {
+    // open file
+    seqan::BamStream bs(it->c_str());
+    //    seq = kseq_init(fp);
+    seqan::BamAlignmentRecord rec;
+    while (!atEnd(bs)) {
+      t++;
+      if (seqan::readRecord(rec, bs) == 0) {
+	if (!hasFlagQCNoPass(rec) && !hasFlagDuplicate(rec)) {
+	  for (size_t i = 0; i < qsize; i++) {
+	    sps[i](seqan::toCString(rec.seq), seqan::length(rec.seq),
+		   seqan::toCString(rec.qual), seqan::length(rec.qual));
+	  }
+	  n++;
+	}
+      }
+    }  
+
+  }
+  //cout << "Records in bam files " << n << " " << t << endl;
+
+  ofstream of;
+  of.open(opt.output.c_str(), ios::out);
+  for (size_t i = 0; i < qsize; i++) {
+    of << "Q = " << opt.q_cutoff[i] << endl;
+    of << sps[i].report();
+  }
   of.close();
 };
 
@@ -387,7 +435,6 @@ public:
 	    hf.init(s+i); // start the k-mer at position i
 	    //cout << " new valid k-mer" << endl;
 	    last_valid = true;
-	    i++;
 	    j++;
 	  } else {
 	    j++; // move along
@@ -410,6 +457,8 @@ public:
   void handle(uint64_t val) {
     sc(val);
   }
+
+  void setQualityCutoff(size_t q) {}
 
   string report() {
     return sc.report();
@@ -457,7 +506,7 @@ public:
       //cout << "(" << i << ", " << j << ", " << last_valid << ")\t" << string(s).substr(i,j-i) << endl;
       // s[i...j-1] is a valid string, all k-mers in s[..j-1] have been processed
       char c = s[j];
-      if (c != 'N' && c != 'n' && q[j] >= (char) (q_base+q_cutoff)) {
+      if (c != 'N' && c != 'n' && (q[j] >= (char) (q_base+q_cutoff))) {
 	if (last_valid) { 
 	  // s[i..j-1] was a valid k-mer k-mer, update 
 	  //cout << "out,in = " << s[i] << ", " << s[j] << endl;
@@ -469,7 +518,6 @@ public:
 	    hf.init(s+i); // start the k-mer at position i
 	    //cout << " new valid k-mer" << endl;
 	    last_valid = true;
-	    i++;
 	    j++;
 	  } else {
 	    j++; // move along
@@ -522,7 +570,7 @@ int main(int argc, char** argv) {
   
   //
   Kmer::set_k(opt.k);
-  bool use_qual = opt.q_cutoff.empty() || (*(opt.q_cutoff.begin()) != 0);
+  //bool use_qual = opt.q_cutoff.empty() || (*(opt.q_cutoff.begin()) != 0);
   if (opt.bam) {
     /*
     if (!use_qual) {
@@ -532,7 +580,7 @@ int main(int argc, char** argv) {
     }
     */
     if (opt.threads > 1) {
-      //RunThreadedBamStream<ReadQualityHasher>(opt);
+      RunThreadedBamStream<ReadQualityHasher>(opt);
     } else {
       RunBamStream<ReadQualityHasher>(opt);
     }
@@ -546,6 +594,7 @@ int main(int argc, char** argv) {
     if (opt.threads > 1) {
       RunThreadedFastqStream<ReadQualityHasher>(opt);
     } else {
+      //cerr << "running non-threaded version" << endl;
       RunFastqStream<ReadQualityHasher>(opt);
     }
   }
