@@ -38,7 +38,8 @@ typedef vector<pair<string,string> > read_t;
 
 
 struct ProgramOptions {
-  size_t k;
+  //size_t k;
+	vector<int> klist;
   bool verbose;
 	bool online;
   bool bam;
@@ -50,7 +51,7 @@ struct ProgramOptions {
   size_t threads;
   int seed;
   size_t chunksize;
-  ProgramOptions() : k(0), verbose(false), online(false),  bam(false), e(0.01), seed(0), threads(1), chunksize(10000), q_base(33) {}
+  ProgramOptions() : verbose(false), online(false),  bam(false), e(0.01), seed(0), threads(1), chunksize(10000), q_base(33) {}
 };
 
 void PrintUsage() {
@@ -58,7 +59,7 @@ void PrintUsage() {
   cerr << "Estimates occurrences of k-mers in fastq or fasta files and saves results" << endl << endl;
   cerr << "Usage: KmerStream [options] ... FASTQ files";
   cerr << endl << endl <<
-    "-k, --kmer-size=INT      Size of k-mers" << endl <<
+    "-k, --kmer-size=INT      Size of k-mers, either a single value or comma separated list" << endl <<
     "-q, --quality-cutoff=INT Comma separated list, keep k-mers with bases above quality threshold in PHRED (default 0)" << endl <<
     "-o, --output=STRING      Filename for output" << endl <<
     "-e, --error-rate=FLOAT   Error rate guaranteed (default value 0.01)" << endl <<
@@ -110,8 +111,21 @@ void ParseOptions(int argc, char **argv, ProgramOptions &opt) {
     case 0:
       break;
     case 'k':
-      opt.k = atoi(optarg);
+		{
+      //opt.k = atoi(optarg);
+			next=0,prev=0;
+			string ks(optarg);
+			while ((next = ks.find(',',prev)) != string::npos) {
+				if (next-prev != 0) {
+					opt.klist.push_back(atoi(ks.substr(prev,next-prev).c_str()));
+				}
+				prev = next+1;
+			}
+			if (prev < ks.size()) {
+				opt.klist.push_back(atoi(ks.substr(prev).c_str()));
+			}
       break;
+		}
     case 'o':
       opt.output = optarg;
       break;
@@ -125,18 +139,20 @@ void ParseOptions(int argc, char **argv, ProgramOptions &opt) {
       opt.threads = atoi(optarg);
       break;
     case 'q':
-
+		{
+			prev=0,next=0;
       qs = string(optarg);
       while ((next = qs.find(',',prev)) != string::npos) {
-	if (next-prev != 0) {
-	  opt.q_cutoff.push_back(atoi(qs.substr(prev,next-prev).c_str()));
-	}
-	prev = next+1;
+				if (next-prev != 0) {
+					opt.q_cutoff.push_back(atoi(qs.substr(prev,next-prev).c_str()));
+				}
+				prev = next+1;
       }
       if (prev < qs.size()) {
-	opt.q_cutoff.push_back(atoi(qs.substr(prev).c_str()));
+				opt.q_cutoff.push_back(atoi(qs.substr(prev).c_str()));
       }
       break;
+		}
     default: break;
     }
   }
@@ -169,11 +185,14 @@ bool CheckOptions(ProgramOptions &opt) {
   bool ret = true;
 
 
-  if (opt.k <= 0) { 
-    cerr << "Error, invalid value for kmer-size: " << opt.k << endl;
-    cerr << "Value must be at least 1" << endl;
-    ret = false;
-  }
+	for (int i = 0; i < opt.klist.size(); i++){
+		int k = opt.klist[i];
+		if (k <= 0) { 
+			cerr << "Error, invalid value for kmer-size: " << k << endl;
+			cerr << "Value must be at least 1" << endl;
+			ret = false;
+		}
+	}
 
   if (opt.files.size() == 0) {
     cerr << "Need to specify files for input" << endl;
@@ -217,9 +236,14 @@ void RunFastqStream(const ProgramOptions &opt) {
   gzFile fp = 0;
   kseq_t *seq = 0;
   size_t qsize = opt.q_cutoff.size();
-  vector<SP> sps(qsize,SP(opt));
+	size_t ksize = opt.klist.size();
+	
+  vector<SP> sps(qsize*ksize,SP(opt));
   for (size_t i = 0; i < qsize; i++) {
-    sps[i].setQualityCutoff(opt.q_cutoff[i]);
+		for (size_t j = 0; j < ksize; j++) {
+			sps[i*qsize+j].setQualityCutoff(opt.q_cutoff[i]);
+			sps[i*qsize+j].setK(opt.klist[j]);
+		}
   }
   // iterate over all reads
   int l;
@@ -233,7 +257,7 @@ void RunFastqStream(const ProgramOptions &opt) {
     while ((l = kseq_read(seq)) > 0) {
 			nreads++;
       // seq->seq.s is of length seq->seq.l
-      for (size_t i = 0; i < qsize; i++) {
+      for (size_t i = 0; i < qsize*ksize; i++) {
 				sps[i](seq->seq.s, seq->seq.l, seq->qual.s, seq->qual.l);
       }
 
@@ -250,8 +274,10 @@ void RunFastqStream(const ProgramOptions &opt) {
   ofstream of;
   of.open(opt.output.c_str(), ios::out);
   for (size_t i = 0 ; i < qsize; i++) {
-    of << "Q = " << opt.q_cutoff[i] << endl;
-    of << sps[i].report();
+		for (size_t j = 0; j < ksize; j++) {
+			of << "Q = " << opt.q_cutoff[i] << ", k = " << opt.klist[j] << endl;
+			of << sps[i*qsize+j].report();
+		}
   }
   of.close();
 
@@ -419,7 +445,7 @@ void RunBamStream(const ProgramOptions &opt) {
 
 class ReadHasher {
 public:
-  ReadHasher(const ProgramOptions &opt) : k(opt.k), hf(opt.k), sc(opt.e, opt.seed) {
+  ReadHasher(const ProgramOptions &opt) : k(0), hf(), sc(opt.e, opt.seed) {
     if (opt.seed != 0) {
       hf.seed(opt.seed);
     }
@@ -477,6 +503,12 @@ public:
 
   void setQualityCutoff(size_t q) {}
 
+
+	void setK(size_t _k) {
+		k = _k;
+		hf.init(k);
+	}
+
   string report() {
     return sc.report();
   }
@@ -498,7 +530,7 @@ private:
 
 class ReadQualityHasher {
 public:
-  ReadQualityHasher(const ProgramOptions &opt) : k(opt.k), hf(opt.k), sc(opt.e, opt.seed), q_cutoff(0), q_base(opt.q_base) {
+  ReadQualityHasher(const ProgramOptions &opt) : k(0), hf(), sc(opt.e, opt.seed), q_cutoff(0), q_base(opt.q_base) {
     if (opt.seed != 0) {
       hf.seed(opt.seed);
     }
@@ -507,6 +539,11 @@ public:
   void setQualityCutoff(size_t q) {
     q_cutoff = q;
   }
+
+	void setK(size_t _k) {
+		k = _k;
+		hf.init(k);
+	}
 
   void operator()(const char* s, size_t l, const char* q, size_t ql) {
     // create hashes for all k-mers
@@ -590,7 +627,7 @@ int main(int argc, char** argv) {
   }
   
   //
-  Kmer::set_k(opt.k);
+  //Kmer::set_k(opt.k);
   //bool use_qual = opt.q_cutoff.empty() || (*(opt.q_cutoff.begin()) != 0);
   if (opt.bam) {
     /*

@@ -30,16 +30,25 @@ class RepHash {
 
  
 
- RepHash(int _k) : k(_k), 
-    last1mask (1ULL << 63), 
-    lastkmask( ((1ULL<<k)-1) << (64-k) ), 
-    firstkmask((1ULL<<k)-1), 
-    charmask (31) 
-      {
-	assert(k>0);
-	assert(k<=63);
-	seed(0);
-      }
+	RepHash(int _k) {
+		assert(_k>0);
+		assert(_k<=63);
+		init(_k);
+		seed(0);
+	}
+
+	RepHash() {
+		init(0);
+		seed(0);
+	}
+
+	void init(int _k) {
+		k = _k;
+		last1mask =  (1ULL << 63);
+		lastkmask =  ((1ULL<<k)-1) << (64-k);
+		firstkmask = (1ULL<<k)-1;
+		charmask = 31;
+	}
   
   void seed(int s);
   
