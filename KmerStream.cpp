@@ -40,6 +40,7 @@ typedef vector<pair<string,string> > read_t;
 struct ProgramOptions {
   size_t k;
   bool verbose;
+	bool online;
   bool bam;
   string output;
   vector<string> files;
@@ -49,7 +50,7 @@ struct ProgramOptions {
   size_t threads;
   int seed;
   size_t chunksize;
-  ProgramOptions() : k(0), verbose(false), bam(false), e(0.01), seed(0), threads(1), chunksize(10000), q_base(33) {}
+  ProgramOptions() : k(0), verbose(false), online(false),  bam(false), e(0.01), seed(0), threads(1), chunksize(10000), q_base(33) {}
 };
 
 void PrintUsage() {
@@ -64,7 +65,8 @@ void PrintUsage() {
     "-t, --threads=INT        SNumber of threads to use (default value 1)" << endl <<
     "-s, --seed=INT           Seed value for the randomness (default value 0, use time based randomness)" << endl <<
     "-b, --bam                Input is in BAM format (default false)" << endl <<
-    "    --verbose            Print lots of messages during run" << endl << 
+    "    --verbose            Print lots of messages during run" << endl <<
+		"    --online             Prints out estimates every 100K reads" << endl <<
     "    --q64                set if PHRED+64 scores are used (@...h) default used PHRED+33" << endl << endl
 
     ;
@@ -72,6 +74,7 @@ void PrintUsage() {
 
 void ParseOptions(int argc, char **argv, ProgramOptions &opt) {
   int verbose_flag = 0;
+	int online_flag = 0;
   int bam_flag = 0;
   int q64_flag =0;
 
@@ -79,6 +82,7 @@ void ParseOptions(int argc, char **argv, ProgramOptions &opt) {
   static struct option long_options[] =
   {
     {"verbose", no_argument, &verbose_flag, 1},
+		{"online", no_argument, &online_flag, 1},
     {"q64", no_argument, &q64_flag, 1},
     {"bam", no_argument, &bam_flag, 'b'},
     {"threads", required_argument, 0, 't'},
@@ -141,10 +145,14 @@ void ParseOptions(int argc, char **argv, ProgramOptions &opt) {
   for (int i = optind; i < argc; i++) {
     opt.files.push_back(argv[i]);
   }
+
   
   if (verbose_flag) {
     opt.verbose = true;
   }
+	if (online_flag) {
+		opt.online = true;
+	}
   if (bam_flag) {
     opt.bam = true;
   }
@@ -216,17 +224,24 @@ void RunFastqStream(const ProgramOptions &opt) {
   // iterate over all reads
   int l;
 
+	size_t nreads = 0;
+	
   for (vector<string>::const_iterator it = opt.files.begin(); it != opt.files.end(); ++it) {
     //cout << "reading file " << *it << endl;
     fp = gzopen(it->c_str(), "r");
     seq = kseq_init(fp); 
-    while ((l = kseq_read(seq)) > 0) { 
+    while ((l = kseq_read(seq)) > 0) {
+			nreads++;
       // seq->seq.s is of length seq->seq.l
       for (size_t i = 0; i < qsize; i++) {
-	sps[i](seq->seq.s, seq->seq.l, seq->qual.s, seq->qual.l);
+				sps[i](seq->seq.s, seq->seq.l, seq->qual.s, seq->qual.l);
       }
-    }
 
+			if (opt.online && (nreads % 100000) == 0) {
+				cout << (nreads/1000) << "K reads  -- " <<
+					sps[0].humanReport() << endl;
+			}
+    }
   }
 
   kseq_destroy(seq); // STEP 5: destroy seq
@@ -543,6 +558,10 @@ public:
     sc(val);
   }
 
+	string humanReport() {
+		return sc.humanReport();
+	}
+	
   string report() {
     return sc.report();
   }

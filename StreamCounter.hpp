@@ -251,6 +251,31 @@ public:
     return (size_t) (sum/n);
     }*/
 
+	std::string humanReport() const {
+		std::stringstream s;
+		size_t eF0 = F0();
+		size_t ef1 = f1();
+		size_t eF1 = sumCount;
+		s << readable(eF0-ef1) << " repeated, " <<
+			readable(eF0) << " distinct, " <<
+			readable(ef1) << " singletons, " <<
+			readable(eF1) << " total k-mers processed";
+		return s.str();
+	}
+
+	std::string readable(size_t x) const {
+		std::stringstream s;
+		if (x < (1ULL<<10)) {
+			s << x;
+		} else if (x < (1ULL<<20)) {
+			s << (x/1024) << "K";
+		} else if (x < (1ULL<<30)) {
+			s << (x/(1ULL<<20)) << "M";
+		} else {
+			s << (x/(1ULL<<30)) << "G";
+		}
+		return s.str();
+	}
   
   std::string report() const {
     std::stringstream s;
