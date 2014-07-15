@@ -5,7 +5,7 @@ MAX_KMER_SIZE=64
 CXXFLAGS = -c -Wall -Wno-reorder $(INCLUDES) -DMAX_KMER_SIZE=$(MAX_KMER_SIZE) -fopenmp
 LDFLAGS =
 #OPENMP=-lgomp
-OPENMP=
+OPENMP=-fopenmp
 LDLIBS  = -lm -lz $(OPENMP)
 
 all: CXXFLAGS += -O3
