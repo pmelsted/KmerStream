@@ -1,15 +1,23 @@
-CC = g++
-CXX = g++
 INCLUDES = -I. 
 MAX_KMER_SIZE=64
-CXXFLAGS = -c -Wall -Wno-reorder $(INCLUDES) -DMAX_KMER_SIZE=$(MAX_KMER_SIZE) -fopenmp
+CXXFLAGS = -c -Wall -Wno-reorder $(INCLUDES) -DMAX_KMER_SIZE=$(MAX_KMER_SIZE) 
 LDFLAGS =
-#OPENMP=-lgomp
+
+
+
+ifeq ($(findstring clang,$(shell $(CXX) --version)), clang) 
 OPENMP=
+else
+OPENMP=-lgomp
+CXXFLAGS += -fopenmp
+endif
+
 LDLIBS  = -lm -lz $(OPENMP)
+
 
 all: CXXFLAGS += -O3
 all: target
+
 
 
 debug: CXXFLAGS += -gstabs+ -O0
