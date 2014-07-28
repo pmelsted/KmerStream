@@ -1,18 +1,18 @@
 INCLUDES = -I. 
 MAX_KMER_SIZE=64
-CXXFLAGS = -c -Wall -Wno-reorder $(INCLUDES) -DMAX_KMER_SIZE=$(MAX_KMER_SIZE) 
+CXXFLAGS = -c -pthread -Wall -Wno-reorder -Wno-header-guard $(INCLUDES) -DMAX_KMER_SIZE=$(MAX_KMER_SIZE) 
 LDFLAGS =
 
 
-
-ifeq ($(findstring clang,$(shell $(CXX) --version)), clang) 
 OPENMP=
-else
-OPENMP=-lgomp
-CXXFLAGS += -fopenmp
-endif
+#ifeq ($(findstring clang,$(shell $(CXX) --version)), clang) 
+#OPENMP=
+#else
+#OPENMP=-lgomp
+#CXXFLAGS += -fopenmp
+#endif
 
-LDLIBS  = -lm -lz $(OPENMP)
+LDLIBS  = -lm -lz $(OPENMP) -lpthread
 
 
 all: CXXFLAGS += -O3
@@ -20,8 +20,8 @@ all: target
 
 
 
-debug: CXXFLAGS += -gstabs+ -O0
-debug: LDFLAGS += -gstabs+
+debug: CXXFLAGS += -g -O2
+debug: LDFLAGS += -g
 debug: target
 
 profile: CXXFLAGS += -p -g -O2

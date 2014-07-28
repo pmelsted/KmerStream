@@ -14,6 +14,8 @@
   #include <omp.h>
 #endif
 
+#include <pthread.h>
+
 #include "common.h"
 #include "kseq.h"
 #include "StreamCounter.hpp"
@@ -51,7 +53,7 @@ struct ProgramOptions {
   size_t threads;
   int seed;
   size_t chunksize;
-  ProgramOptions() : verbose(false), online(false),  bam(false), e(0.01), seed(0), threads(1), chunksize(10000), q_base(33) {}
+  ProgramOptions() : verbose(false), online(false),  bam(false), e(0.01), seed(0), threads(1), chunksize(100000), q_base(33) {}
 };
 
 void PrintUsage() {
@@ -222,10 +224,11 @@ bool CheckOptions(ProgramOptions &opt) {
     #endif
   }
 
+/*
   if (opt.q_cutoff[0] < 0) {
     cerr << "Invalid quality score" << endl;
     ret = false;
-  }
+		}*/
 
   return ret;
 }
@@ -241,8 +244,8 @@ void RunFastqStream(const ProgramOptions &opt) {
   vector<SP> sps(qsize*ksize,SP(opt));
   for (size_t i = 0; i < qsize; i++) {
 		for (size_t j = 0; j < ksize; j++) {
-			sps[i*qsize+j].setQualityCutoff(opt.q_cutoff[i]);
-			sps[i*qsize+j].setK(opt.klist[j]);
+			sps[i*ksize+j].setQualityCutoff(opt.q_cutoff[i]);
+			sps[i*ksize+j].setK(opt.klist[j]);
 		}
   }
   // iterate over all reads
@@ -276,27 +279,51 @@ void RunFastqStream(const ProgramOptions &opt) {
   for (size_t i = 0 ; i < qsize; i++) {
 		for (size_t j = 0; j < ksize; j++) {
 			of << "Q = " << opt.q_cutoff[i] << ", k = " << opt.klist[j] << endl;
-			of << sps[i*qsize+j].report();
+			of << sps[i*ksize+j].report();
 		}
   }
   of.close();
-
-
 }
 
+
+template <typename SP>
+struct worker_t {
+  read_t *r;
+  SP *sps;
+};
+
+template <typename SP>
+void* sps_worker(void* _data) {
+  worker_t<SP> *data = (worker_t<SP>*) _data;
+  SP &sps = *(data->sps);
+  const read_t &reads = *(data->r);
+
+  size_t n = reads.size();
+  for (int i = 0; i < n; i++) {
+    sps(reads[i].first.c_str(), reads[i].first.size(), reads[i].second.c_str(), reads[i].second.size());
+  }
+  pthread_exit(0);
+}
 
 template <typename SP>
 void RunThreadedFastqStream(const ProgramOptions &opt) {
   std::ios_base::sync_with_stdio(false);
   gzFile fp;  
-  kseq_t *seq;
+  kseq_t *seq = 0;
   size_t threads = opt.threads;
   size_t qsize = opt.q_cutoff.size();
+	size_t ksize = opt.klist.size();
+	/*if (threads > ksize*qsize) {
+		threads = ksize*qsize;
+		}*/
+	threads = ksize*qsize;
 
-  vector<SP> sps(threads*qsize,SP(opt)); 
+	
+  vector<SP> sps(qsize*ksize,SP(opt)); 
   for (size_t i = 0; i < qsize; i++) {
-    for (size_t j = 0; j < threads; j++) {
-      sps[j*qsize + i].setQualityCutoff(opt.q_cutoff[i]);
+    for (size_t j = 0; j < ksize; j++) {
+      sps[i*ksize + j].setQualityCutoff(opt.q_cutoff[i]);
+			sps[i*ksize + j].setK(opt.klist[j]);
     }
   }
 
@@ -304,64 +331,60 @@ void RunThreadedFastqStream(const ProgramOptions &opt) {
   // iterate over all reads
 
   size_t readCount;
+	
   size_t chunk = opt.chunksize;
   read_t reads(chunk);
-#ifdef _OPENMP
-  omp_set_num_threads(threads);  
-#endif 
+
   for (vector<string>::const_iterator it = opt.files.begin(); it != opt.files.end(); ++it) {
     int l = 1;
     //cout << "reading file " << *it << endl;
     fp = gzopen(it->c_str(), "r");
     seq = kseq_init(fp);
     
-    while (l != 0) { // when l is 0 there are no more reads
-
+    while (l > 0) { // when l is 0 there are no more reads
       readCount = 0;
       reads.clear();
       while ((l = kseq_read(seq) > 0) && readCount < chunk) {  
-	readCount++;
-	// seq->seq.s is of length seq->seq.l
-	// TODO: parallelize this part
-	reads.push_back(make_pair(string(seq->seq.s), string(seq->qual.s)));
-	//      sp(seq->seq.s, seq->seq.l, seq->qual.s, seq->qual.l);
+				readCount++;
+				// seq->seq.s is of length seq->seq.l
+				// TODO: parallelize this part
+				reads.push_back(make_pair(string(seq->seq.s), string(seq->qual.s)));
+				//      sp(seq->seq.s, seq->seq.l, seq->qual.s, seq->qual.l);
       }  
       
       // ok, do this in parallel
-#pragma omp parallel 
-      {
-	size_t threadnum = 0;
-#ifdef _OPENMP
-	threadnum = omp_get_thread_num();
-#endif
-	
-	
-#pragma omp for 
-	for (size_t j = 0; j < reads.size(); j++) {
-	  for (size_t i = 0; i < qsize; i++) {
-	    sps[threadnum*qsize + i](reads[j].first.c_str(), reads[j].first.size(), reads[j].second.c_str(), reads[j].second.size());
-	  }
-	}
-	
-      }
-    }
+			
+			//pthread_t *tid = (pthread_t*) alloca(threads * sizeof(pthread_t));
+      //worker_t<SP> *data = (worker_t<SP>*) alloca(threads * sizeof(worker_t<SP>));
+      vector<pthread_t> tid(threads);
+      vector<worker_t<SP> > data(threads);
+
+			for (int t = 0; t < threads; t++) {
+				data[t].r = &reads;
+				data[t].sps = &sps[t];
+			}
+
+			for (int t = 0; t < threads; t++) {
+        pthread_create(&tid[t],0,sps_worker<SP>,(void*)&data[t]);
+
+			}
+
+			for (int t = 0; t < threads; t++) {
+				pthread_join(tid[t],0);
+			}
+		}
+
     kseq_destroy(seq); 
     gzclose(fp); 
   }
   
-  // join with thread 0
-
-  for (size_t i = 1; i < threads; i++) {
-    for (size_t j = 0; j < qsize; j++) {
-      sps[j].join(sps[i*qsize+j]);
-    }
-  }
-
   ofstream of;
   of.open(opt.output.c_str(), ios::out);
   for (size_t i = 0; i < qsize; i++) {
-    of << "Q = " << opt.q_cutoff[i] << endl;
-    of << sps[i].report();
+    for (size_t j = 0; j < ksize; j++ ) {
+      of << "Q = " << opt.q_cutoff[i] << ", k = " << opt.klist[j] <<  endl;
+      of << sps[i*ksize + j].report();
+    }
   }
   of.close();
 };
