@@ -38,22 +38,21 @@ void CountStream_PrintUsage() {
   cerr << "Estimates number of k-mers in sequence files" << endl << endl;
   cerr << "Usage: StreamCounter stream [options] ... FASTQ files";
   cerr << endl << endl <<
-    "-k, --kmer-size=INT             Size of k-mers, at most " << (int) (Kmer::MAX_K-1)<< endl << 
-    "-m, --bucket-size=INT           Number of buckets, should be a power of 2, recommended values" << endl <<
-    "                                are 256 (7% error), 1024 (2% error, default) and 65536 (.5% error)" << endl <<
-    "-o, --output=STRING             Filename for output" << endl <<
-    "    --verbose                   Print lots of messages during run" << endl << endl
-    ;
+       "-k, --kmer-size=INT             Size of k-mers, at most " << (int) (Kmer::MAX_K-1)<< endl <<
+       "-m, --bucket-size=INT           Number of buckets, should be a power of 2, recommended values" << endl <<
+       "                                are 256 (7% error), 1024 (2% error, default) and 65536 (.5% error)" << endl <<
+       "-o, --output=STRING             Filename for output" << endl <<
+       "    --verbose                   Print lots of messages during run" << endl << endl
+       ;
 }
 
 
 
 
-void CountStream_ParseOptions(int argc, char **argv, CountStream_ProgramOptions &opt) {
+void CountStream_ParseOptions(int argc, char **argv, CountStream_ProgramOptions& opt) {
   int verbose_flag = 0;
-  const char* opt_string = "k:m:o:";
-  static struct option long_options[] =
-  {
+  const char *opt_string = "k:m:o:";
+  static struct option long_options[] = {
     {"verbose", no_argument,  &verbose_flag, 1},
     {"kmer-size", required_argument, 0, 'k'},
     {"bucket-size", required_argument, 0, 'm'},
@@ -71,12 +70,12 @@ void CountStream_ParseOptions(int argc, char **argv, CountStream_ProgramOptions 
     }
 
     switch (c) {
-    case 0: 
+    case 0:
       break;
-    case 'k': 
-      opt.k = atoi(optarg); 
+    case 'k':
+      opt.k = atoi(optarg);
       break;
-    case 'o': 
+    case 'o':
       opt.output = optarg;
       break;
     case 'm':
@@ -90,14 +89,14 @@ void CountStream_ParseOptions(int argc, char **argv, CountStream_ProgramOptions 
   for (int i = optind; i < argc; i++) {
     opt.files.push_back(argv[i]);
   }
-  
+
   if (verbose_flag) {
     opt.verbose = true;
   }
 }
 
 
-bool CountStream_CheckOptions(CountStream_ProgramOptions &opt) {
+bool CountStream_CheckOptions(CountStream_ProgramOptions& opt) {
   bool ret = true;
 
   if (opt.k <= 0 || opt.k >= MAX_KMER_SIZE) {
@@ -118,7 +117,7 @@ bool CountStream_CheckOptions(CountStream_ProgramOptions &opt) {
   if (opt.m > (1<<16)) {
     opt.m = (1<<16);
   }
-  
+
   if ((opt.m & (opt.m-1)) != 0) {
     cerr << "Error, m should be a power of 2: " << opt.m << endl;
     size_t x = opt.m-1;
@@ -141,27 +140,27 @@ bool CountStream_CheckOptions(CountStream_ProgramOptions &opt) {
     for(it = opt.files.begin(); it != opt.files.end(); ++it) {
       intStat = stat(it->c_str(), &stFileInfo);
       if (intStat != 0) {
-	cerr << "Error: file not found, " << *it << endl;
-	ret = false;
+        cerr << "Error: file not found, " << *it << endl;
+        ret = false;
       }
     }
   }
-  
- 
+
+
   //TODO: check if we have permission to write to outputfile
-  
+
   return ret;
 
 }
 
-void CountStream_PrintSummary(const CountStream_ProgramOptions &opt) {
- 
+void CountStream_PrintSummary(const CountStream_ProgramOptions& opt) {
+
 }
 
 
-void CountStream_Normal(const CountStream_ProgramOptions &opt) {
+void CountStream_Normal(const CountStream_ProgramOptions& opt) {
   // create hash table and bloom filter
- 
+
   char name[8196],s[8196];
   size_t name_len,len;
 
@@ -178,7 +177,7 @@ void CountStream_Normal(const CountStream_ProgramOptions &opt) {
 
 
   uint64_t n_read = 0;
-  uint64_t num_kmers = 0;  
+  uint64_t num_kmers = 0;
 
   size_t table_size = phi_inv * m;
 
@@ -200,8 +199,8 @@ void CountStream_Normal(const CountStream_ProgramOptions &opt) {
     for (size_t i = 0; i <= len-k; ++i) {
       ++num_kmers;
       if (i > 0) {
-	km = km.forwardBase(s[i+k-1]);
-	tw = tw.backwardBase(s[i+k-1]);
+        km = km.forwardBase(s[i+k-1]);
+        tw = tw.backwardBase(s[i+k-1]);
       }
       Kmer rep = (km < tw) ? km : tw;
       // process rep
@@ -210,16 +209,16 @@ void CountStream_Normal(const CountStream_ProgramOptions &opt) {
       size_t w = 1+bitScanForward(h); // Hyperloglog needs 1-based index, TODO shift h prior
 
       if (w > 64-b) {
-	w = 64-b;
+        w = 64-b;
       }
       if (M[j] < w) {
-	M[j] = w;
+        M[j] = w;
       }
 
       // TODO: figure out how to put in correct bin
       /*      if (V[(64*j+w)] < 2) {
-	V[(64*j+w)]++;
-	}*/
+      V[(64*j+w)]++;
+      }*/
 
     }
     ++n_read;
@@ -233,13 +232,13 @@ void CountStream_Normal(const CountStream_ProgramOptions &opt) {
     cerr << "processed " << num_kmers << " kmers in " << n_read  << " reads"<< endl;
   }
 
-  
+
   /*int *M = new int[m];
   for (size_t i = 0; i < m; i++) {
     M[i] = 0;
     for (size_t j = 0; j < 64; j++) {
       if (V[(64*i+j)] > 0) {
-	M[i] = (int)j;
+  M[i] = (int)j;
       }
     }
   }
@@ -249,7 +248,7 @@ void CountStream_Normal(const CountStream_ProgramOptions &opt) {
   for (size_t i = 0; i < m; i++) {
     Zinv += pow(2.0,-M[i]);
   }
-  
+
   // compute a_m
   double a_m = 0.0;
   if (m == 16) {
@@ -270,11 +269,11 @@ void CountStream_Normal(const CountStream_ProgramOptions &opt) {
   // cleanup
   //delete[] V;
   delete[] M;
-  
+
 }
 
 void CountStream(int argc, char **argv) {
-  
+
   CountStream_ProgramOptions opt;
   CountStream_ParseOptions(argc,argv,opt);
 
@@ -282,12 +281,12 @@ void CountStream(int argc, char **argv) {
     CountStream_PrintUsage();
     exit(1);
   }
-  
+
   if (!CountStream_CheckOptions(opt)) {
     CountStream_PrintUsage();
     exit(1);
   }
-  
+
   // set static global k-value
   Kmer::set_k(opt.k);
 

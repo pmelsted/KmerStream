@@ -20,7 +20,7 @@ all: target
 
 
 
-debug: CXXFLAGS += -g -O2
+debug: CXXFLAGS += -g -O0
 debug: LDFLAGS += -g
 debug: target
 

@@ -6,9 +6,9 @@
 #include <time.h>
 
 static const unsigned char twin[32] = {
-  0, 20, 2, 7, 4, 5, 6, 3,  
-  8,  9, 10, 11, 12, 13, 14, 15, 
-  16, 17, 18, 19, 1, 21, 22, 23, 
+  0, 20, 2, 7, 4, 5, 6, 3,
+  8,  9, 10, 11, 12, 13, 14, 15,
+  16, 17, 18, 19, 1, 21, 22, 23,
   24, 25, 26, 27, 28, 29, 30, 31
 };
 
@@ -20,43 +20,43 @@ struct state_t {
     lo ^= o.lo;
     return *this;
   }
-  
+
   state_t() : hi(0), lo(0) {}
-  
+
 };
 
 class RepHash {
  public:
 
- 
 
-	RepHash(int _k) {
-		assert(_k>0);
-		assert(_k<=63);
-		init(_k);
-		seed(0);
-	}
 
-	RepHash() {
-		init(0);
-		seed(0);
-	}
+  RepHash(int _k) {
+    assert(_k>0);
+    assert(_k<=63);
+    init(_k);
+    seed(0);
+  }
 
-	void init(int _k) {
-		k = _k;
-		last1mask =  (1ULL << 63);
-		lastkmask =  ((1ULL<<k)-1) << (64-k);
-		firstkmask = (1ULL<<k)-1;
-		charmask = 31;
-	}
-  
+  RepHash() {
+    init(0);
+    seed(0);
+  }
+
+  void init(int _k) {
+    k = _k;
+    last1mask =  (1ULL << 63);
+    lastkmask =  ((1ULL<<k)-1) << (64-k);
+    firstkmask = (1ULL<<k)-1;
+    charmask = 31;
+  }
+
   void seed(int s);
-  
-  
+
+
 
   inline void fastleftshiftk(state_t& x) {
     uint64_t upper =    (x.hi & (lastkmask)); // upper k of 64 bits of hi
-    x.hi = (x.hi<<k) | ((x.lo & (lastkmask)) >> (64-k));// 
+    x.hi = (x.hi<<k) | ((x.lo & (lastkmask)) >> (64-k));//
     x.lo = (x.lo<<k) | ((upper)              >> (64-k));
   }
 
@@ -71,7 +71,7 @@ class RepHash {
     x.hi = (x.hi<<1) | ((x.lo & last1mask)>>63);
     x.lo = (x.lo<<1) | (last1 >> 63);
   }
-  
+
   inline void fastrightshift1(state_t& x) {
     uint64_t first1 = (x.hi & 1ULL);  // first bit of hi
     x.hi = (x.hi>>1) | ((x.lo & 1ULL) <<63);
@@ -82,10 +82,10 @@ class RepHash {
     return h.lo ^ ht.lo;
   }
 
-  void init(const char* _s) {
+  void init(const char *_s) {
     h = state_t();
     ht = state_t();
-    const unsigned char* s = (const unsigned char*) _s;
+    const unsigned char *s = (const unsigned char *) _s;
     for (size_t i = 0; i < k; i++) {
       fastleftshift1(h);
       state_t hval = hvals[s[i] & charmask];
@@ -104,7 +104,7 @@ class RepHash {
     state_t hval(hvals[in & charmask]);
     h ^= z;
     h ^= hval;
-    
+
     state_t zt(hvals[twin[in & charmask]]);
     fastleftshiftk(zt);
     state_t hvalt(hvals[twin[out & charmask]]);
