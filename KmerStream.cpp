@@ -53,7 +53,10 @@ struct ProgramOptions {
   size_t threads;
   int seed;
   size_t chunksize;
-  ProgramOptions() : verbose(false), online(false),  bam(false), e(0.01), seed(0), threads(1), chunksize(100000), q_base(33) {}
+  bool binary;
+  ProgramOptions() : verbose(false), online(false),  bam(false), e(0.01),
+                     seed(0), threads(1), chunksize(100000), q_base(33),
+                     binary(false) {}
 };
 
 void PrintUsage() {
@@ -68,6 +71,7 @@ void PrintUsage() {
        "-t, --threads=INT        SNumber of threads to use (default value 1)" << endl <<
        "-s, --seed=INT           Seed value for the randomness (default value 0, use time based randomness)" << endl <<
        "-b, --bam                Input is in BAM format (default false)" << endl <<
+       "    --binary             Output is written in binary format (default false)" << endl <<
        "    --verbose            Print lots of messages during run" << endl <<
        "    --online             Prints out estimates every 100K reads" << endl <<
        "    --q64                set if PHRED+64 scores are used (@...h) default used PHRED+33" << endl << endl
@@ -78,11 +82,13 @@ void PrintUsage() {
 void ParseOptions(int argc, char **argv, ProgramOptions& opt) {
   int verbose_flag = 0;
   int online_flag = 0;
+  int binary_flag = 0;
   int q64_flag =0;
 
   const char *opt_string = "k:o:e:s:bt:q:";
   static struct option long_options[] = {
     {"verbose", no_argument, &verbose_flag, 1},
+    {"binary", no_argument, &binary_flag, 1},
     {"online", no_argument, &online_flag, 1},
     {"q64", no_argument, &q64_flag, 1},
     {"bam", no_argument, 0, 'b'},
@@ -167,6 +173,9 @@ void ParseOptions(int argc, char **argv, ProgramOptions& opt) {
   if (verbose_flag) {
     opt.verbose = true;
   }
+  if (binary_flag) {
+    opt.binary = true;
+  }
   if (online_flag) {
     opt.online = true;
   }
@@ -183,7 +192,7 @@ bool CheckOptions(ProgramOptions& opt) {
   bool ret = true;
 
 
-  for (int i = 0; i < opt.klist.size(); i++) {
+  for (size_t i = 0; i < opt.klist.size(); i++) {
     int k = opt.klist[i];
     if (k <= 0) {
       cerr << "Error, invalid value for kmer-size: " << k << endl;
@@ -270,15 +279,26 @@ void RunFastqStream(const ProgramOptions& opt) {
   kseq_destroy(seq); // STEP 5: destroy seq
   gzclose(fp); // STEP 6: close the file handler
 
-  ofstream of;
-  of.open(opt.output.c_str(), ios::out);
-  for (size_t i = 0 ; i < qsize; i++) {
-    for (size_t j = 0; j < ksize; j++) {
-      of << "Q = " << opt.q_cutoff[i] << ", k = " << opt.klist[j] << endl;
-      of << sps[i*ksize+j].report();
+  if (opt.binary) {
+    for (size_t i = 0 ; i < qsize; i++) {
+      for (size_t j = 0; j < ksize; j++) {
+        std::stringstream ss(opt.output.c_str());
+        ss << "_Q_" << opt.q_cutoff[i] << "_k_" << opt.klist[j];
+        std::string fn = ss.str();
+        sps[i*ksize+j].writeBinary(fn);
+      }
     }
+  } else {
+    ofstream of;
+    of.open(opt.output.c_str(), ios::out);
+    for (size_t i = 0 ; i < qsize; i++) {
+      for (size_t j = 0; j < ksize; j++) {
+        of << "Q = " << opt.q_cutoff[i] << ", k = " << opt.klist[j] << endl;
+        of << sps[i*ksize+j].report();
+      }
+    }
+    of.close();
   }
-  of.close();
 }
 
 
@@ -374,15 +394,26 @@ void RunThreadedFastqStream(const ProgramOptions& opt) {
     gzclose(fp);
   }
 
-  ofstream of;
-  of.open(opt.output.c_str(), ios::out);
-  for (size_t i = 0; i < qsize; i++) {
-    for (size_t j = 0; j < ksize; j++ ) {
-      of << "Q = " << opt.q_cutoff[i] << ", k = " << opt.klist[j] <<  endl;
-      of << sps[i*ksize + j].report();
+  if (opt.binary) {
+    for (size_t i = 0 ; i < qsize; i++) {
+      for (size_t j = 0; j < ksize; j++) {
+        std::stringstream ss(opt.output);
+        ss << "_Q_" << opt.q_cutoff[i] << "_k_" << opt.klist[j];
+        std::string fn = ss.str();
+        sps[i*ksize+j].writeBinary(fn);
+      }
     }
+  } else {
+    ofstream of;
+    of.open(opt.output.c_str(), ios::out);
+    for (size_t i = 0; i < qsize; i++) {
+      for (size_t j = 0; j < ksize; j++ ) {
+        of << "Q = " << opt.q_cutoff[i] << ", k = " << opt.klist[j] <<  endl;
+        of << sps[i*ksize + j].report();
+      }
+    }
+    of.close();
   }
-  of.close();
 };
 
 
@@ -456,16 +487,28 @@ void RunBamStream(const ProgramOptions& opt) {
 
   }
   //cout << "Records in bam files " << n << " " << t << endl;
+  std::cout << "Binary = " << opt.binary << ", output = " << opt.output <<  std::endl;
 
-  ofstream of;
-  of.open(opt.output.c_str(), ios::out);
-  for (size_t i = 0; i < qsize; i++) {
-    for (size_t j = 0; j < ksize; j++) {
-      of << "Q = " << opt.q_cutoff[i] << ", k = " << opt.klist[j] << endl;
-      of << sps[i*ksize+j].report();
+  if (opt.binary) {
+    for (size_t i = 0 ; i < qsize; i++) {
+      for (size_t j = 0; j < ksize; j++) {
+        std::stringstream ss;
+        ss << opt.output << "_Q_" << opt.q_cutoff[i] << "_k_" << opt.klist[j];
+        std::string fn = ss.str();
+        sps[i*ksize+j].writeBinary(fn);
+      }
     }
+  } else {
+    ofstream of;
+    of.open(opt.output.c_str(), ios::out);
+    for (size_t i = 0; i < qsize; i++) {
+      for (size_t j = 0; j < ksize; j++) {
+        of << "Q = " << opt.q_cutoff[i] << ", k = " << opt.klist[j] << endl;
+        of << sps[i*ksize+j].report();
+      }
+    }
+    of.close();
   }
-  of.close();
 };
 
 
@@ -542,6 +585,10 @@ class ReadHasher {
 
   bool join(const ReadHasher& o) {
     return sc.join(o.sc);
+  }
+
+  bool writeBinary(const std::string& fn) {
+    return sc.writeBinary(fn);
   }
 
  private:
@@ -634,6 +681,10 @@ class ReadQualityHasher {
     return sc.join(o.sc);
   }
 
+  bool writeBinary(const std::string& fn) {
+    return sc.writeBinary(fn);
+  }
+
  private:
 
   size_t q_cutoff,q_base;
@@ -688,5 +739,3 @@ int main(int argc, char **argv) {
     }
   }
 }
-
-

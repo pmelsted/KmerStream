@@ -3,3 +3,4 @@
 tmp*
 KmerStream
 test_rephash
+StreamJoin

@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <string>
 #include <cmath>
+#include <fstream>
+#include <assert.h>
 
 #include "lsb.hpp"
 
@@ -50,7 +52,9 @@ class StreamCounter {
 
   ~StreamCounter() {
     delete[] table;
+    table = 0;
     delete[] M;
+    M = 0;
   }
 
   int getSeed() const {
@@ -231,6 +235,83 @@ class StreamCounter {
     return s.str();
   }
 
+
+  bool writeBinary(const std::string& fn) {
+      std::ofstream out;
+      out.open(fn.c_str(), std::ios::out | std::ios::binary);
+      if (!out.is_open()) {
+        std::cerr << "Error: could not write to file " << fn << std::endl;
+        return false;
+      }
+
+      // 1. write out seed
+      out.write((char*)&seed, sizeof(seed));
+      // 2. write out size
+      out.write((char*)&size, sizeof(size));
+      // 3. write out e
+      out.write((char*)&e, sizeof(e));
+      // 3.5 write out sumCount
+      out.write((char*)&sumCount, sizeof(sumCount));
+      // 4. write out MAX_TABLE
+      out.write((char*)&MAX_TABLE, sizeof(MAX_TABLE));
+      // 5. write out M
+      out.write((char*)M, MAX_TABLE*sizeof(M[0]));
+      // 6. write out table
+      out.write((char*)table, size*MAX_TABLE*sizeof(table[0]));
+      out.flush();
+      out.close();
+      return true;
+  }
+
+  bool loadBinary(const std::string& fn) {
+    std::ifstream in;
+    size_t oldsize = size;
+    in.open(fn.c_str(), std::ios::in | std::ios::binary);
+
+    // 1. read seed
+    in.read((char*)&seed,sizeof(seed));
+    // 2. read size
+    in.read((char*)&size,sizeof(size));
+    // 3. read e
+    in.read((char*)&e, sizeof(e));
+    // 3.5 read sumCount
+    in.read((char*)&sumCount, sizeof(sumCount));
+
+
+    size_t max_table;
+    // 4. read MAX_TABLE
+    in.read((char*)&max_table, sizeof(max_table));
+    if(MAX_TABLE != max_table) {
+      std::cerr <<"Error: Max table size doesn't match" << std::endl;
+      std::cerr << "MAX_TABLE = " << MAX_TABLE << std::endl << "max_table = " << max_table << std::endl;
+      exit(1);
+    }
+
+    // fill in other variables
+    mask = (size * countsPerLong) -1;
+    maxCount = size * countsPerLong * maxVal;
+
+    // allocate space
+    if (oldsize != size) {
+      if (M != 0) {
+          delete[] M;
+          M = new size_t[MAX_TABLE];
+      }
+      if (table != 0) {
+        delete[] table;
+        table = new uint64_t[size*MAX_TABLE];
+      }
+    }
+
+    // 5. read M
+    in.read((char*)M, MAX_TABLE*sizeof(M[0]));
+
+    // 6. read T
+    in.read((char*)table, size*MAX_TABLE*sizeof(table[0]));
+    in.close();
+
+    return true;
+  }
 
  private:
 

@@ -1,11 +1,11 @@
-INCLUDES = -I. 
+INCLUDES = -I.
 MAX_KMER_SIZE=64
-CXXFLAGS = -c -pthread -Wall -Wno-reorder -Wno-header-guard $(INCLUDES) -DMAX_KMER_SIZE=$(MAX_KMER_SIZE) 
+CXXFLAGS = -c -pthread -Wall -Wno-reorder -Wno-header-guard $(INCLUDES) -DMAX_KMER_SIZE=$(MAX_KMER_SIZE)
 LDFLAGS =
 
 
 OPENMP=
-#ifeq ($(findstring clang,$(shell $(CXX) --version)), clang) 
+#ifeq ($(findstring clang,$(shell $(CXX) --version)), clang)
 #OPENMP=
 #else
 #OPENMP=-lgomp
@@ -29,7 +29,7 @@ profile: LDFLAGS += -p -g
 profile: clean
 profile: target
 
-target: KmerStream
+target: KmerStream StreamJoin
 
 
 OBJECTS = lsb.o Kmer.o KmerIterator.o hash.o RepHash.o
@@ -37,6 +37,9 @@ OBJECTS = lsb.o Kmer.o KmerIterator.o hash.o RepHash.o
 
 KmerStream: KmerStream.o $(OBJECTS)
 	$(CXX) $(INCLUDES) $(OBJECTS) KmerStream.o $(LDFLAGS) $(LDLIBS) -o KmerStream
+
+StreamJoin: StreamJoin.o StreamCounter.hpp
+	$(CXX) $(INCLUDES) StreamJoin.o $(LDFLAGS) $(LDLIBS) -o StreamJoin
 
 
 lsb.o: lsb.cpp lsb.hpp
@@ -47,4 +50,4 @@ hash.o: hash.cpp hash.hpp
 RepHash.o: RepHash.cpp RepHash.hpp
 
 clean:
-	rm -f *.o KmerStream
+	rm -f *.o KmerStream StreamJoin
