@@ -48,6 +48,7 @@ Kmer.o: Kmer.cpp Kmer.hpp
 KmerIterator.o: KmerIterator.cpp KmerIterator.hpp
 hash.o: hash.cpp hash.hpp
 RepHash.o: RepHash.cpp RepHash.hpp
+StreamJoin.o: StreamJoin.cpp
 
 clean:
 	rm -f *.o KmerStream StreamJoin

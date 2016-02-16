@@ -93,8 +93,13 @@ class StreamCounter {
     }
 
     for (size_t i = 0; i < MAX_TABLE; i++) {
+      M[i] = 0;
       for (size_t j = 0; j < size*countsPerLong; j++) {
-        setVal(j,i,getVal(j,i)+o.getVal(j,i));
+        uint64_t val = getVal(j,i);
+        uint64_t oval = o.getVal(j,i);
+        //setVal(j,i,getVal(j,i)+o.getVal(j,i));
+        setVal(j,i,val+oval);
+        M[i] += getVal(j,i);
       }
     }
 
