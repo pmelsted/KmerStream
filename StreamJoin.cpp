@@ -26,10 +26,11 @@ struct ProgramOptions {
 };
 
 void PrintUsage() {
-  cerr << "StreamJoin " << VERSION << endl << endl;
-  cerr << "Creates union of many stream estimates" << endl << endl;
-  cerr << "Usage: StreamJoin [options] ... files";
-  cerr << endl << endl <<
+  cout << "StreamJoin " << VERSION << endl << endl;
+  cout << "Creates union of many stream estimates" << endl << endl;
+  cout << "Usage: StreamJoin -o output files ..." << endl;
+  cout << "       StreamJoin merged-file";
+  cout << endl << endl <<
        "-o, --output=STRING      Filename for output" << endl <<
        "    --verbose            Print output at the end" << endl <<
        endl;

@@ -54,16 +54,17 @@ struct ProgramOptions {
   int seed;
   size_t chunksize;
   bool binary;
+  bool tsv;
   ProgramOptions() : verbose(false), online(false),  bam(false), e(0.01),
                      seed(0), threads(1), chunksize(100000), q_base(33),
-                     binary(false) {}
+                     binary(false),tsv(false) {}
 };
 
 void PrintUsage() {
-  cerr << "KmerStream " << VERSION << endl << endl;
-  cerr << "Estimates occurrences of k-mers in fastq or fasta files and saves results" << endl << endl;
-  cerr << "Usage: KmerStream [options] ... FASTQ files";
-  cerr << endl << endl <<
+  cout << "KmerStream " << VERSION << endl << endl;
+  cout << "Estimates occurrences of k-mers in fastq or fasta files and saves results" << endl << endl;
+  cout << "Usage: KmerStream [options] ... FASTQ files";
+  cout << endl << endl <<
        "-k, --kmer-size=INT      Size of k-mers, either a single value or comma separated list" << endl <<
        "-q, --quality-cutoff=INT Comma separated list, keep k-mers with bases above quality threshold in PHRED (default 0)" << endl <<
        "-o, --output=STRING      Filename for output" << endl <<
@@ -72,6 +73,7 @@ void PrintUsage() {
        "-s, --seed=INT           Seed value for the randomness (default value 0, use time based randomness)" << endl <<
        "-b, --bam                Input is in BAM format (default false)" << endl <<
        "    --binary             Output is written in binary format (default false)" << endl <<
+       "    --tsv                Output is written in TSV format (default false)" << endl <<
        "    --verbose            Print lots of messages during run" << endl <<
        "    --online             Prints out estimates every 100K reads" << endl <<
        "    --q64                set if PHRED+64 scores are used (@...h) default used PHRED+33" << endl << endl
@@ -83,12 +85,14 @@ void ParseOptions(int argc, char **argv, ProgramOptions& opt) {
   int verbose_flag = 0;
   int online_flag = 0;
   int binary_flag = 0;
+  int tsv_flag = 0;
   int q64_flag =0;
 
   const char *opt_string = "k:o:e:s:bt:q:";
   static struct option long_options[] = {
     {"verbose", no_argument, &verbose_flag, 1},
     {"binary", no_argument, &binary_flag, 1},
+    {"tsv", no_argument, &tsv_flag, 1},
     {"online", no_argument, &online_flag, 1},
     {"q64", no_argument, &q64_flag, 1},
     {"bam", no_argument, 0, 'b'},
@@ -175,6 +179,9 @@ void ParseOptions(int argc, char **argv, ProgramOptions& opt) {
   }
   if (binary_flag) {
     opt.binary = true;
+  }
+  if (tsv_flag) {
+    opt.tsv = true;
   }
   if (online_flag) {
     opt.online = true;
@@ -291,10 +298,17 @@ void RunFastqStream(const ProgramOptions& opt) {
   } else {
     ofstream of;
     of.open(opt.output.c_str(), ios::out);
+    if (opt.tsv) {
+      of << "Q\tk\tF0\tf1\tF1" << endl;
+    }
     for (size_t i = 0 ; i < qsize; i++) {
       for (size_t j = 0; j < ksize; j++) {
-        of << "Q = " << opt.q_cutoff[i] << ", k = " << opt.klist[j] << endl;
-        of << sps[i*ksize+j].report();
+        if (!opt.tsv) {
+          of << "Q = " << opt.q_cutoff[i] << ", k = " << opt.klist[j] << endl;
+        } else {
+          of << opt.q_cutoff[i] << "\t" << opt.klist[j] << "\t";
+        }
+        of << sps[i*ksize+j].report(opt.tsv);
       }
     }
     of.close();
@@ -406,10 +420,17 @@ void RunThreadedFastqStream(const ProgramOptions& opt) {
   } else {
     ofstream of;
     of.open(opt.output.c_str(), ios::out);
+    if (opt.tsv) {
+      of << "Q\tk\tF0\tf1\tF1" << endl;
+    }
     for (size_t i = 0; i < qsize; i++) {
       for (size_t j = 0; j < ksize; j++ ) {
-        of << "Q = " << opt.q_cutoff[i] << ", k = " << opt.klist[j] <<  endl;
-        of << sps[i*ksize + j].report();
+        if (!opt.tsv) {
+          of << "Q = " << opt.q_cutoff[i] << ", k = " << opt.klist[j] <<  endl;
+        } else {
+          of << opt.q_cutoff[i] << "\t" << opt.klist[j] << "\t";
+        }
+        of << sps[i*ksize + j].report(opt.tsv);
       }
     }
     of.close();
@@ -487,7 +508,7 @@ void RunBamStream(const ProgramOptions& opt) {
 
   }
   //cout << "Records in bam files " << n << " " << t << endl;
-  std::cout << "Binary = " << opt.binary << ", output = " << opt.output <<  std::endl;
+  //std::cout << "Binary = " << opt.binary << ", output = " << opt.output <<  std::endl;
 
   if (opt.binary) {
     for (size_t i = 0 ; i < qsize; i++) {
@@ -501,10 +522,17 @@ void RunBamStream(const ProgramOptions& opt) {
   } else {
     ofstream of;
     of.open(opt.output.c_str(), ios::out);
+    if (opt.tsv) {
+      of << "Q\tk\tF0\tf1\tF1" << endl;
+    }
     for (size_t i = 0; i < qsize; i++) {
       for (size_t j = 0; j < ksize; j++) {
-        of << "Q = " << opt.q_cutoff[i] << ", k = " << opt.klist[j] << endl;
-        of << sps[i*ksize+j].report();
+        if (!opt.tsv) {
+          of << "Q = " << opt.q_cutoff[i] << ", k = " << opt.klist[j] << endl;
+        } else {
+          of << opt.q_cutoff[i] << "\t" << opt.klist[j] << "\t";
+        }
+        of << sps[i*ksize+j].report(opt.tsv);
       }
     }
     of.close();
@@ -673,8 +701,8 @@ class ReadQualityHasher {
     return sc.humanReport();
   }
 
-  string report() {
-    return sc.report();
+  string report(bool tsv) {
+    return sc.report(tsv);
   }
 
   bool join(const ReadQualityHasher& o) {

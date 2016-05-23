@@ -146,6 +146,10 @@ class StreamCounter {
     }
   }
 
+  size_t F1() const {
+    return sumCount;
+  }
+
   size_t f1() const {
     size_t R = size*countsPerLong;
     double sum = 0;
@@ -215,7 +219,7 @@ class StreamCounter {
     return s.str();
   }
 
-  std::string report() const {
+  std::string report(bool useTSV = false) const {
     std::stringstream s;
     /*
     size_t R = size*countsPerLong;
@@ -231,11 +235,13 @@ class StreamCounter {
     }
     s << std::endl << F0() << std::endl;
     */
-
-    s << "F0 = " << F0() << std::endl;
-    s << "f1 = " << f1() << std::endl;
-    s << "F1 = " << sumCount << std::endl;
-
+    if (useTSV) {
+      s << F0() << "\t" << f1() << "\t" << F1() << std::endl;
+    } else {
+      s << "F0 = " << F0() << std::endl;
+      s << "f1 = " << f1() << std::endl;
+      s << "F1 = " << sumCount << std::endl;
+    }
 
     return s.str();
   }
