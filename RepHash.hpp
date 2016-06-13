@@ -32,7 +32,7 @@ class RepHash {
 
   RepHash(int _k) {
     assert(_k>0);
-    assert(_k<=63);
+    //assert(_k<=63);
     init(_k);
     seed(0);
   }
@@ -43,7 +43,8 @@ class RepHash {
   }
 
   void init(int _k) {
-    k = _k;
+    full_k = _k;
+    k = full_k % 64;
     last1mask =  (1ULL << 63);
     lastkmask =  ((1ULL<<k)-1) << (64-k);
     firstkmask = (1ULL<<k)-1;
@@ -58,12 +59,22 @@ class RepHash {
     uint64_t upper =    (x.hi & (lastkmask)); // upper k of 64 bits of hi
     x.hi = (x.hi<<k) | ((x.lo & (lastkmask)) >> (64-k));//
     x.lo = (x.lo<<k) | ((upper)              >> (64-k));
+    if (full_k & 64) {
+      uint64_t t = x.hi;
+      x.hi = x.lo;
+      x.lo = t;
+    }
   }
 
   inline void fastrightshiftk(state_t& x) {
     uint64_t lower =    (x.hi & (firstkmask)); // lower k bits
     x.hi = (x.hi>>k) | ((x.lo & (firstkmask)) << (64-k));
     x.lo = (x.lo>>k) | ((lower)               << (64-k));
+    if (full_k & 64) {
+      uint64_t t = x.hi;
+      x.hi = x.lo;
+      x.lo = t;
+    }
   }
 
   inline void fastleftshift1(state_t& x) {
@@ -79,20 +90,20 @@ class RepHash {
   }
 
   uint64_t hash() const {
-    return h.lo ^ ht.lo;
+    return h.lo  ^ ht.lo;
   }
 
   void init(const char *_s) {
     h = state_t();
     ht = state_t();
     const unsigned char *s = (const unsigned char *) _s;
-    for (size_t i = 0; i < k; i++) {
+    for (size_t i = 0; i < full_k; i++) {
       fastleftshift1(h);
       state_t hval = hvals[s[i] & charmask];
       h ^= hval;
 
       fastleftshift1(ht);
-      state_t hvalt = hvals[twin[s[k-1-i] & charmask]];
+      state_t hvalt = hvals[twin[s[full_k-1-i] & charmask]];
       ht ^= hvalt;
     }
   }
@@ -115,6 +126,7 @@ class RepHash {
 
  private:
   size_t k;
+  size_t full_k;
   uint64_t last1mask, lastkmask, firstkmask;
   unsigned char charmask;
   state_t h,ht;
