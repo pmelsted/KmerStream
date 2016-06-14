@@ -40,26 +40,31 @@ Options:
 + `-t` number of threads to use
 + `-s` KmerStream uses random hash functions for computing the statistics, to fix the hash value for reproducibility set the seed to a fixed value, e.g. '-s 42'
 + `-b` Input is in BAM format
-+ `--binary` Write output in binary format, this includes the data necessary for running `StreamJoin`, the output filename is used as a prefix and the file containing the output is `PREFIX` + `_Q_0_k_31`
++ `--binary` Write output in binary format, this includes the data necessary for running `KmerStreamJoin`, the output filename is used as a prefix and the file containing the output is `PREFIX` + `_Q_0_k_31`
 + `--tsv` Write output in TSV (tab separated values) format for easier parsing
 + `--online` prints estimates every 100K reads, see (https://pmelsted.wordpress.com/2014/07/12/analyzing-data-while-downloading/)[https://pmelsted.wordpress.com/2014/07/12/analyzing-data-while-downloading/] for example usage
 + `--q64` Quality values are enchoded in PHRED+64 format rather than the default PHRED+33, use this if your quality values are from `@` to `h` rather than `!` to `I`
 
 
-## StreamJoin
+## KmerStreamJoin
 
 ~~~
-StreamJoin 1.1
+KmerStreamJoin 1.1
 
 Creates union of many stream estimates
 
-Usage: StreamJoin -o output files ...
-       StreamJoin merged-file
+Usage: KmerStreamJoin -o output files ...
+       KmerStreamJoin merged-file
 
 -o, --output=STRING      Filename for output
     --verbose            Print output at the end
 ~~~
 
-StreamJoin, when run with the `-o` option takes a list of KmerStream binary output files (created with `--binary` option to KmerStream) and creates a single binary output file that is equivalent to having run a single KmerStream run on all of the files. When the `-o` option is missing it outputs the KmerStream result of the binary input file.
+KmerStreamJoin, when run with the `-o` option takes a list of KmerStream binary output files (created with `--binary` option to KmerStream) and creates a single binary output file that is equivalent to having run a single KmerStream run on all of the files. When the `-o` option is missing it outputs the KmerStream result of the binary input file.
 
 This utility is useful when distributing the process of creating the binary files or computed incrementally.
+
+
+## KmerStreamEstimate.py
+
+KmerStreamEstimate is a python script that reads a tsv file as input (generated using `--tsv`) and estimates the genome size (G), error rate (e), and coverage (lambda).

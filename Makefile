@@ -29,7 +29,7 @@ profile: LDFLAGS += -p -g
 profile: clean
 profile: target
 
-target: KmerStream StreamJoin
+target: KmerStream KmerStreamJoin
 
 
 OBJECTS = lsb.o Kmer.o KmerIterator.o hash.o RepHash.o
@@ -38,8 +38,8 @@ OBJECTS = lsb.o Kmer.o KmerIterator.o hash.o RepHash.o
 KmerStream: KmerStream.o $(OBJECTS)
 	$(CXX) $(INCLUDES) $(OBJECTS) KmerStream.o $(LDFLAGS) $(LDLIBS) -o KmerStream
 
-StreamJoin: StreamJoin.o StreamCounter.hpp
-	$(CXX) $(INCLUDES) StreamJoin.o $(LDFLAGS) $(LDLIBS) -o StreamJoin
+KmerStreamJoin: StreamJoin.o StreamCounter.hpp
+	$(CXX) $(INCLUDES) StreamJoin.o $(LDFLAGS) $(LDLIBS) -o KmerStreamJoin
 
 
 lsb.o: lsb.cpp lsb.hpp
@@ -51,4 +51,4 @@ RepHash.o: RepHash.cpp RepHash.hpp
 StreamJoin.o: StreamJoin.cpp
 
 clean:
-	rm -f *.o KmerStream StreamJoin
+	rm -f *.o KmerStream KmerStreamJoin

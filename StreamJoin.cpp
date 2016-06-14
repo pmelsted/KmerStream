@@ -26,10 +26,10 @@ struct ProgramOptions {
 };
 
 void PrintUsage() {
-  cout << "StreamJoin " << VERSION << endl << endl;
+  cout << "KmerStreamJoin " << VERSION << endl << endl;
   cout << "Creates union of many stream estimates" << endl << endl;
-  cout << "Usage: StreamJoin -o output files ..." << endl;
-  cout << "       StreamJoin merged-file";
+  cout << "Usage: KmerStreamJoin -o output files ..." << endl;
+  cout << "       KmerStreamJoin merged-file";
   cout << endl << endl <<
        "-o, --output=STRING      Filename for output" << endl <<
        "    --verbose            Print output at the end" << endl <<
