@@ -329,7 +329,7 @@ void *sps_worker(void *_data) {
   const read_t& reads = *(data->r);
 
   size_t n = reads.size();
-  for (int i = 0; i < n; i++) {
+  for (unsigned int i = 0; i < n; i++) {
     sps(reads[i].first.c_str(), reads[i].first.size(), reads[i].second.c_str(), reads[i].second.size());
   }
   pthread_exit(0);
@@ -389,17 +389,17 @@ void RunThreadedFastqStream(const ProgramOptions& opt) {
       vector<pthread_t> tid(threads);
       vector<worker_t<SP> > data(threads);
 
-      for (int t = 0; t < threads; t++) {
+      for (unsigned int t = 0; t < threads; t++) {
         data[t].r = &reads;
         data[t].sps = &sps[t];
       }
 
-      for (int t = 0; t < threads; t++) {
+      for (unsigned int t = 0; t < threads; t++) {
         pthread_create(&tid[t],0,sps_worker<SP>,(void *)&data[t]);
 
       }
 
-      for (int t = 0; t < threads; t++) {
+      for (unsigned int t = 0; t < threads; t++) {
         pthread_join(tid[t],0);
       }
     }

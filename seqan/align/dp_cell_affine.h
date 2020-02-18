@@ -81,8 +81,9 @@ public:
     DPCell_ &
     operator=(DPCell_ const & other)
     {
-        if (this != &other)
+        if (this != &other) {
             _score = other._score;
+        }
             _horizontalScore = other._horizontalScore;
             _verticalScore = other._verticalScore;
         return *this;
