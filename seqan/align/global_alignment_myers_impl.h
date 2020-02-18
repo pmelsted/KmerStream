@@ -67,8 +67,9 @@ _globalAlignmentScore(String<TAlphabetH, TSpecH> const & seqH,
 {
     // Switch horizontal and vertical gap roles, gapsV should be the shorter one
     // to fit into less words.
-    if (length(seqH) < length(seqV))
+    if (length(seqH) < length(seqV)) {
         return _globalAlignmentScore(seqV, seqH, algorithmTag);
+    }
 
 	// Use size of unsigned int as blocksize for bit-vectors.
 	const unsigned int BLOCK_SIZE = BitsPerValue<unsigned int>::VALUE;

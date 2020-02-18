@@ -1730,8 +1730,9 @@ void convertMatchesToGlobalAlignment(FragmentStore<TSpec, TConfig> &store, TScor
     // Number of alignments with a quality score (edit distance) before computing global alignment.  We will fill the
     // store for all alignments if there are no scores yet.
     unsigned alignQualityStoreLengthPre = length(store.alignQualityStore);
-    if (alignQualityStoreLengthPre == 0u)
+    if (alignQualityStoreLengthPre == 0u) {
         resize(store.alignQualityStore, length(store.alignedReadStore));
+    }
 	
 	// sort matches by increasing begin positions
 	sortAlignedReads(store.alignedReadStore, SortBeginPos());

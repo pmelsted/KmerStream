@@ -406,8 +406,9 @@ _alignBandedSmithWatermanTrace(LocalAlignmentFinder<TScoreValue> & finder,
 
 	TSize actualRow = row + lo_row;
     TSize actualCol = static_cast<TSize>(col + diagL + actualRow);
-    if ((actualCol == 0) || (actualRow == 0)) 
+    if ((actualCol == 0) || (actualRow == 0)) {
         return Pair<Pair<TDiagonal> >();
+    }
 
 	if (actualCol < len1) _alignTracePrint(finder.trace, seqH, seqV, id1, actualCol, id2, actualRow, len1 - actualCol, Horizontal);
 	if (actualRow < len2) _alignTracePrint(finder.trace, seqH, seqV, id1, actualCol, id2, actualRow, len2 - actualRow, Vertical);

@@ -89,7 +89,7 @@ public:
     std::string testCaseName;
     std::string testName;
     std::string typeName;
-    std::auto_ptr<Test> instance;
+    std::unique_ptr<Test> instance;
 
     TestDescription_(char const * testCaseName, char const * testName,
                      char const * typeName, Test * instance) :
